@@ -149,11 +149,12 @@ const Auth: React.FC = () => {
                     
                     <Button
                       type="submit"
-                      variant="accent"
+                      variant="default"
                       size="lg"
                       isLoading={isSubmitting}
                       fullWidth
                       rightIcon={<ArrowRight className="h-4 w-4" />}
+                      customStyle="accent"
                     >
                       {authType === 'signin' ? 'Sign In' : 'Create Account'}
                     </Button>

@@ -180,10 +180,11 @@ const Search: React.FC = () => {
                 </div>
                 <div className="md:w-auto w-full md:mt-0 mt-2">
                   <Button 
-                    variant="accent" 
+                    variant="default" 
                     size="lg"
                     className="w-full"
                     rightIcon={<SearchIcon className="h-4 w-4" />}
+                    customStyle="accent"
                   >
                     Search
                   </Button>
@@ -284,7 +285,7 @@ const Search: React.FC = () => {
                     <Button variant="outline" className="flex-1">
                       Reset
                     </Button>
-                    <Button variant="primary" className="flex-1" onClick={() => setIsFilterOpen(false)}>
+                    <Button variant="default" className="flex-1" onClick={() => setIsFilterOpen(false)} customStyle="primary">
                       Apply
                     </Button>
                   </div>
@@ -353,7 +354,7 @@ const Search: React.FC = () => {
                   <Button variant="outline" className="flex-1">
                     Reset
                   </Button>
-                  <Button variant="primary" className="flex-1">
+                  <Button variant="default" className="flex-1" customStyle="primary">
                     Apply
                   </Button>
                 </div>

@@ -1,11 +1,89 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Button from '@/components/Button';
-import { Warehouse, CheckCircle, DollarSign, Calendar, Shield } from 'lucide-react';
+import { Warehouse, CheckCircle, DollarSign, Calendar, Shield, Upload, CameraIcon } from 'lucide-react';
+import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 const ForHosts: React.FC = () => {
+  const { toast } = useToast();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
+    zipCode: '',
+    spaceType: '',
+    size: '',
+    price: '',
+    description: '',
+    availableAllDay: true,
+    securityCamera: false,
+    coverImage: null as File | null,
+  });
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSelectChange = (name: string, value: string) => {
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSwitchChange = (name: string, checked: boolean) => {
+    setFormData(prev => ({ ...prev, [name]: checked }));
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFormData(prev => ({ ...prev, coverImage: e.target.files![0] }));
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    // Simulate API call
+    setTimeout(() => {
+      setIsSubmitting(false);
+      toast({
+        title: "Space Listed Successfully!",
+        description: "Your parking space has been listed on Parkongo. You'll be notified when someone books it.",
+      });
+      setShowForm(false);
+      
+      // Reset form data
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        address: '',
+        city: '',
+        zipCode: '',
+        spaceType: '',
+        size: '',
+        price: '',
+        description: '',
+        availableAllDay: true,
+        securityCamera: false,
+        coverImage: null,
+      });
+    }, 1500);
+  };
+  
   const benefits = [
     {
       icon: <DollarSign className="h-6 w-6 text-parkongo-600" />,
@@ -46,8 +124,9 @@ const ForHosts: React.FC = () => {
                     size="lg"
                     customStyle="primary"
                     leftIcon={<Warehouse className="h-5 w-5" />}
+                    onClick={() => setShowForm(!showForm)}
                   >
-                    List Your Space Now
+                    {showForm ? "Hide Form" : "List Your Space Now"}
                   </Button>
                 </div>
               </div>
@@ -77,6 +156,239 @@ const ForHosts: React.FC = () => {
             </div>
           </div>
         </section>
+        
+        {/* Listing Form Section - Only shown when showForm is true */}
+        {showForm && (
+          <section className="py-16 bg-white">
+            <div className="container mx-auto px-4 md:px-6">
+              <div className="max-w-3xl mx-auto">
+                <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-100">
+                  <h2 className="text-2xl font-bold mb-6 text-center">List Your Parking Space</h2>
+                  
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Personal Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold border-b pb-2">Personal Information</h3>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="name">Full Name</Label>
+                          <Input 
+                            id="name" 
+                            name="name" 
+                            value={formData.name} 
+                            onChange={handleInputChange} 
+                            placeholder="John Doe" 
+                            required 
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="email">Email Address</Label>
+                          <Input 
+                            id="email" 
+                            name="email" 
+                            type="email" 
+                            value={formData.email} 
+                            onChange={handleInputChange} 
+                            placeholder="john@example.com" 
+                            required 
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="phone">Phone Number</Label>
+                          <Input 
+                            id="phone" 
+                            name="phone" 
+                            value={formData.phone} 
+                            onChange={handleInputChange} 
+                            placeholder="+91 9876543210" 
+                            required 
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Space Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold border-b pb-2">Space Information</h3>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="address">Address</Label>
+                          <Input 
+                            id="address" 
+                            name="address" 
+                            value={formData.address} 
+                            onChange={handleInputChange} 
+                            placeholder="123 Main St" 
+                            required 
+                          />
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="city">City</Label>
+                            <Input 
+                              id="city" 
+                              name="city" 
+                              value={formData.city} 
+                              onChange={handleInputChange} 
+                              placeholder="Mumbai" 
+                              required 
+                            />
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <Label htmlFor="zipCode">ZIP Code</Label>
+                            <Input 
+                              id="zipCode" 
+                              name="zipCode" 
+                              value={formData.zipCode} 
+                              onChange={handleInputChange} 
+                              placeholder="400001" 
+                              required 
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="spaceType">Space Type</Label>
+                          <Select 
+                            value={formData.spaceType} 
+                            onValueChange={(value) => handleSelectChange('spaceType', value)}
+                          >
+                            <SelectTrigger id="spaceType">
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="garage">Garage</SelectItem>
+                              <SelectItem value="driveway">Driveway</SelectItem>
+                              <SelectItem value="carport">Carport</SelectItem>
+                              <SelectItem value="outdoor">Outdoor Space</SelectItem>
+                              <SelectItem value="underground">Underground</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Details Section */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold border-b pb-2">Space Details</h3>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <Label htmlFor="size">Size</Label>
+                          <Select 
+                            value={formData.size} 
+                            onValueChange={(value) => handleSelectChange('size', value)}
+                          >
+                            <SelectTrigger id="size">
+                              <SelectValue placeholder="Select size" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="compact">Compact Car</SelectItem>
+                              <SelectItem value="standard">Standard Car</SelectItem>
+                              <SelectItem value="large">Large Car/SUV</SelectItem>
+                              <SelectItem value="oversized">Oversized/Van</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <Label htmlFor="price">Monthly Price (₹)</Label>
+                          <Input 
+                            id="price" 
+                            name="price" 
+                            type="number" 
+                            value={formData.price} 
+                            onChange={handleInputChange} 
+                            placeholder="3000" 
+                            required 
+                          />
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="availableAllDay">Available 24/7</Label>
+                            <Switch 
+                              id="availableAllDay" 
+                              checked={formData.availableAllDay}
+                              onCheckedChange={(checked) => handleSwitchChange('availableAllDay', checked)}
+                            />
+                          </div>
+                          <p className="text-sm text-gray-500">Toggle off if your space has limited hours</p>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="securityCamera">Security Camera</Label>
+                            <Switch 
+                              id="securityCamera" 
+                              checked={formData.securityCamera}
+                              onCheckedChange={(checked) => handleSwitchChange('securityCamera', checked)}
+                            />
+                          </div>
+                          <p className="text-sm text-gray-500">Does your space have security cameras?</p>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="description">Description</Label>
+                        <Textarea 
+                          id="description" 
+                          name="description" 
+                          value={formData.description} 
+                          onChange={handleInputChange} 
+                          placeholder="Describe your parking space, access instructions, and any special features." 
+                          rows={4} 
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="coverImage">Upload Photos</Label>
+                        <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center cursor-pointer hover:bg-gray-50 transition">
+                          <input
+                            id="coverImage"
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleFileChange}
+                          />
+                          <label htmlFor="coverImage" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
+                            <CameraIcon className="h-8 w-8 text-gray-400 mb-2" />
+                            <p className="text-sm font-medium text-gray-600">
+                              {formData.coverImage ? formData.coverImage.name : "Click to upload photos of your space"}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1">
+                              Clear photos increase booking chances by 80%
+                            </p>
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="pt-4">
+                      <Button
+                        variant="default"
+                        customStyle="primary"
+                        size="lg"
+                        isLoading={isSubmitting}
+                        type="submit"
+                        fullWidth
+                      >
+                        Submit Listing
+                      </Button>
+                      <p className="text-xs text-center text-gray-500 mt-2">
+                        By submitting, you agree to our Terms of Service and Privacy Policy
+                      </p>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
         
         {/* Benefits Section */}
         <section className="py-16 bg-white">
@@ -160,6 +472,7 @@ const ForHosts: React.FC = () => {
                   variant="default"
                   size="lg"
                   className="bg-white text-parkongo-600 hover:bg-gray-100"
+                  onClick={() => setShowForm(true)}
                 >
                   List Your Space Now
                 </Button>

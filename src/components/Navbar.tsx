@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, X, ChevronDown } from 'lucide-react';
+import { Menu, X, ChevronDown, PlusCircle } from 'lucide-react';
 import Button from './Button';
 import { cn } from '@/lib/utils';
 
@@ -82,12 +82,20 @@ const Navbar: React.FC = () => {
 
         {/* Auth Buttons */}
         <div className="hidden md:flex items-center space-x-4">
+          <Button 
+            variant="outline"
+            leftIcon={<PlusCircle className="h-4 w-4" />}
+            href="/for-hosts"
+            className="border-parkongo-200 text-parkongo-700 hover:bg-parkongo-50"
+          >
+            List Your Space
+          </Button>
           <Button variant="ghost" href="/auth?type=signin">
             Sign In
           </Button>
           <Button 
-            variant="custom" 
-            data-style="primary" 
+            variant="default"
+            customStyle="primary" 
             href="/auth?type=signup"
           >
             Sign Up
@@ -154,6 +162,14 @@ const Navbar: React.FC = () => {
           >
             About
           </Link>
+          <Link 
+            to="/for-hosts" 
+            className="text-xl font-medium text-parkongo-600 flex items-center gap-2" 
+            onClick={closeMenu}
+          >
+            <PlusCircle className="h-5 w-5" />
+            List Your Space
+          </Link>
         </nav>
         <div className="mt-auto space-y-4">
           <Button 
@@ -165,8 +181,8 @@ const Navbar: React.FC = () => {
             Sign In
           </Button>
           <Button 
-            variant="custom"
-            data-style="primary"
+            variant="default"
+            customStyle="primary"
             fullWidth 
             href="/auth?type=signup"
             onClick={closeMenu}

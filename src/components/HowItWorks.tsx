@@ -72,11 +72,11 @@ const HowItWorks: React.FC = () => {
 
             <div className="pt-6 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
               <Button 
-                variant="custom" 
+                variant="default" 
                 size="lg"
                 rightIcon={<ArrowRight className="h-4 w-4" />}
                 href="/search"
-                data-style="primary"
+                customStyle="primary"
               >
                 Start Searching
               </Button>

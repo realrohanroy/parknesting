@@ -5,14 +5,16 @@ import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link' | 'custom';
-  size?: 'default' | 'sm' | 'lg' | 'icon' | 'custom';
+  variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+  size?: 'default' | 'sm' | 'lg' | 'icon';
   isLoading?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
   fullWidth?: boolean;
   asChild?: boolean;
   href?: string;
+  customStyle?: 'primary' | 'accent';
+  customSize?: 'xl';
 }
 
 const Button: React.FC<ButtonProps> = ({
@@ -27,24 +29,23 @@ const Button: React.FC<ButtonProps> = ({
   disabled,
   asChild = false,
   href,
+  customStyle,
+  customSize,
   ...props
 }) => {
-  // Map our custom variants to styles instead of trying to pass them directly
+  // Get custom styles based on customStyle prop
   const getCustomStyles = () => {
     let styles = '';
     
-    // Custom variant styles
-    if (variant === 'custom') {
-      // Apply primary or accent styles
-      if (props['data-style'] === 'primary') {
-        styles += 'bg-parkongo-600 hover:bg-parkongo-700 text-white ';
-      } else if (props['data-style'] === 'accent') {
-        styles += 'bg-gradient-to-r from-parkongo-500 to-parkongo-600 hover:from-parkongo-600 hover:to-parkongo-700 text-white shadow-md hover:shadow-lg ';
-      }
+    // Custom style variants
+    if (customStyle === 'primary') {
+      styles += 'bg-parkongo-600 hover:bg-parkongo-700 text-white ';
+    } else if (customStyle === 'accent') {
+      styles += 'bg-gradient-to-r from-parkongo-500 to-parkongo-600 hover:from-parkongo-600 hover:to-parkongo-700 text-white shadow-md hover:shadow-lg ';
     }
     
     // Custom size styles
-    if (size === 'custom' && props['data-size'] === 'xl') {
+    if (customSize === 'xl') {
       styles += 'h-14 px-8 rounded-lg text-lg ';
     }
     

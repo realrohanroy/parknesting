@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
@@ -6,6 +5,7 @@ import Footer from '@/components/Footer';
 import Button from '@/components/Button';
 import { Eye, EyeOff, Lock, Mail, User, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from '@/hooks/use-toast';
 
 type AuthType = 'signin' | 'signup';
 
@@ -19,7 +19,6 @@ const Auth: React.FC = () => {
   const [name, setName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Parse query param to determine if signin or signup
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const type = params.get('type');
@@ -39,10 +38,15 @@ const Auth: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     
-    // Simulate API call
     setTimeout(() => {
       setIsSubmitting(false);
-      navigate('/search');
+      
+      toast({
+        title: authType === 'signin' ? "Welcome back!" : "Account created successfully!",
+        description: "You have been redirected to your dashboard.",
+      });
+      
+      navigate('/dashboard');
     }, 1500);
   };
   
@@ -55,7 +59,6 @@ const Auth: React.FC = () => {
           <div className="max-w-md mx-auto">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="relative">
-                {/* Top decorative bar */}
                 <div className="h-2 bg-gradient-to-r from-parkongo-400 to-parkongo-600" />
                 
                 <div className="p-8">

@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link' | 'primary' | 'accent';
-  size?: 'default' | 'sm' | 'lg' | 'icon' | 'xl';
+  variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link' | 'custom';
+  size?: 'default' | 'sm' | 'lg' | 'icon' | 'custom';
   isLoading?: boolean;
   leftIcon?: React.ReactNode;
   rightIcon?: React.ReactNode;
@@ -29,27 +29,33 @@ const Button: React.FC<ButtonProps> = ({
   href,
   ...props
 }) => {
-  // Map our custom variants to shadcn variants
-  const variantMap: Record<string, string> = {
-    primary: 'bg-parkongo-600 hover:bg-parkongo-700 text-white',
-    accent: 'bg-gradient-to-r from-parkongo-500 to-parkongo-600 hover:from-parkongo-600 hover:to-parkongo-700 text-white shadow-md hover:shadow-lg',
+  // Map our custom variants to styles instead of trying to pass them directly
+  const getCustomStyles = () => {
+    let styles = '';
+    
+    // Custom variant styles
+    if (variant === 'custom') {
+      // Apply primary or accent styles
+      if (props['data-style'] === 'primary') {
+        styles += 'bg-parkongo-600 hover:bg-parkongo-700 text-white ';
+      } else if (props['data-style'] === 'accent') {
+        styles += 'bg-gradient-to-r from-parkongo-500 to-parkongo-600 hover:from-parkongo-600 hover:to-parkongo-700 text-white shadow-md hover:shadow-lg ';
+      }
+    }
+    
+    // Custom size styles
+    if (size === 'custom' && props['data-size'] === 'xl') {
+      styles += 'h-14 px-8 rounded-lg text-lg ';
+    }
+    
+    return styles;
   };
-
-  // Map our custom sizes to styles
-  const sizeMap: Record<string, string> = {
-    xl: 'h-14 px-8 rounded-lg text-lg',
-  };
-
-  const mappedVariant = variant in variantMap ? 'custom' : variant;
-  const mappedSize = size in sizeMap ? 'custom' : size;
 
   const component = (
     <ShadcnButton
       className={cn(
-        // Apply custom variant styles if needed
-        mappedVariant === 'custom' && variantMap[variant],
-        // Apply custom size styles if needed
-        mappedSize === 'custom' && sizeMap[size],
+        // Apply custom styles
+        getCustomStyles(),
         // Apply full width if needed
         fullWidth && 'w-full',
         'font-medium transition-all duration-200',
@@ -57,8 +63,8 @@ const Button: React.FC<ButtonProps> = ({
         'relative overflow-hidden group',
         className
       )}
-      variant={mappedVariant === 'custom' ? 'default' : mappedVariant}
-      size={mappedSize === 'custom' ? 'default' : mappedSize}
+      variant={variant}
+      size={size}
       disabled={isLoading || disabled}
       asChild={asChild}
       {...props}

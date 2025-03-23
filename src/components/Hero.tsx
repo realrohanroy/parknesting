@@ -40,11 +40,12 @@ const Hero: React.FC = () => {
                 />
               </div>
               <Button 
-                variant="accent" 
+                variant="custom" 
                 size="lg"
                 rightIcon={<Search className="h-4 w-4" />}
                 className="w-full sm:w-auto"
                 href="/search"
+                data-style="accent"
               >
                 Search
               </Button>

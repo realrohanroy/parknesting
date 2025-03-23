@@ -85,7 +85,11 @@ const Navbar: React.FC = () => {
           <Button variant="ghost" href="/auth?type=signin">
             Sign In
           </Button>
-          <Button variant="primary" href="/auth?type=signup">
+          <Button 
+            variant="custom" 
+            data-style="primary" 
+            href="/auth?type=signup"
+          >
             Sign Up
           </Button>
         </div>
@@ -161,7 +165,8 @@ const Navbar: React.FC = () => {
             Sign In
           </Button>
           <Button 
-            variant="primary" 
+            variant="custom"
+            data-style="primary"
             fullWidth 
             href="/auth?type=signup"
             onClick={closeMenu}

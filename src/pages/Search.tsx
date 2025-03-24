@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
@@ -160,7 +159,6 @@ const Search: React.FC = () => {
       <Navbar />
       
       <main className="flex-1 pt-20 bg-gray-50">
-        {/* Search Header */}
         <div className="bg-parkongo-600 text-white py-12">
           <div className="container mx-auto px-4 md:px-6">
             <h1 className="text-3xl md:text-4xl font-bold mb-6 animate-fade-in-up">
@@ -194,7 +192,6 @@ const Search: React.FC = () => {
           </div>
         </div>
         
-        {/* Filters and Results */}
         <div className="container mx-auto px-4 md:px-6 py-8">
           <div className="flex justify-between items-center mb-6">
             <div>
@@ -215,7 +212,6 @@ const Search: React.FC = () => {
           </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Filter Sidebar - Mobile Version */}
             {isFilterOpen && (
               <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden flex justify-end">
                 <div className="bg-white w-full max-w-xs h-full p-6 overflow-y-auto">
@@ -293,7 +289,6 @@ const Search: React.FC = () => {
               </div>
             )}
             
-            {/* Filter Sidebar - Desktop Version */}
             <div className="hidden lg:block lg:col-span-1">
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 sticky top-24">
                 <h3 className="text-lg font-semibold mb-6">Filters</h3>
@@ -361,7 +356,6 @@ const Search: React.FC = () => {
               </div>
             </div>
             
-            {/* Parking Spots */}
             <div className="lg:col-span-3">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {PARKING_SPOTS.map((spot, index) => (
@@ -374,7 +368,6 @@ const Search: React.FC = () => {
                     style={{ animationDelay: `${0.1 + index * 0.05}s` }}
                     onClick={() => navigate(`/parking/${spot.id}`)}
                   >
-                    {/* Image */}
                     <div className="relative h-48 overflow-hidden">
                       <img 
                         src={spot.images[0]} 
@@ -391,7 +384,6 @@ const Search: React.FC = () => {
                       </div>
                     </div>
                     
-                    {/* Content */}
                     <div className="p-5">
                       <h3 className="font-semibold text-lg mb-2 text-gray-800">{spot.title}</h3>
                       
@@ -400,7 +392,6 @@ const Search: React.FC = () => {
                         <span className="truncate">{spot.location}</span>
                       </div>
                       
-                      {/* Features */}
                       <div className="flex flex-wrap gap-2 mb-4">
                         {spot.features.map((feature, fIndex) => (
                           <span 

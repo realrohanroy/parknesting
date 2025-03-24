@@ -1,537 +1,508 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { toast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from '@/components/ui/carousel';
-import { Separator } from '@/components/ui/separator';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import {
-  MapPin,
-  Calendar,
-  Clock,
-  Star,
-  Car,
-  ShieldCheck,
-  CameraIcon,
-  Wifi,
-  Layers,
-  User,
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BookingForm } from '@/components/BookingForm';
+import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { 
+  MapPin, 
+  Calendar, 
+  Clock, 
+  Car, 
+  Shield, 
+  Star, 
+  Heart, 
+  Share2, 
+  ChevronLeft,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
-import { format, addDays } from 'date-fns';
-import { Calendar as CalendarComponent } from '@/components/ui/calendar';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
 
-// Helper to get current auth user
-const getCurrentUser = async () => {
-  const { data, error } = await supabase.auth.getUser();
-  if (error) throw error;
-  return data.user;
-};
-
-// Type for our listing with features
-type ListingWithFeatures = {
-  id: string;
-  title: string;
-  description: string;
-  address: string;
-  city: string;
-  state: string;
-  zipcode: string;
-  space_type: string;
-  hourly_rate: number;
-  daily_rate: number | null;
-  monthly_rate: number | null;
-  images: string[];
-  latitude: number;
-  longitude: number;
-  created_at: string;
-  profile: {
-    id: string;
-    first_name: string;
-    last_name: string;
-    avatar_url: string;
-  };
-  listing_features: {
-    id: string;
-    feature: string;
-    value: any;
-  }[];
-  reviews: {
-    id: string;
-    rating: number;
-    comment: string;
-    created_at: string;
-    reviewer: {
-      first_name: string;
-      last_name: string;
-      avatar_url: string;
-    };
-  }[];
-};
-
-const ParkingSpotDetails: React.FC = () => {
+const ParkingSpotDetails = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [dateFrom, setDateFrom] = useState<Date | undefined>(new Date());
-  const [dateTo, setDateTo] = useState<Date | undefined>(addDays(new Date(), 7));
-  const [isDateFromOpen, setIsDateFromOpen] = useState(false);
-  const [isDateToOpen, setIsDateToOpen] = useState(false);
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [isFavorite, setIsFavorite] = useState(false);
 
-  // Fetch listing details with features and host profile
-  const { data: listing, isLoading, error } = useQuery({
+  // Fetch parking spot details
+  const { data: listing, isLoading } = useQuery({
     queryKey: ['listing', id],
     queryFn: async () => {
-      // First check if the ID is valid
-      if (!id) throw new Error('No listing ID provided');
-
+      if (!id) return null;
+      
       const { data, error } = await supabase
         .from('listings')
         .select(`
           *,
-          profile:profiles(id, first_name, last_name, avatar_url),
-          listing_features(*),
-          reviews(
-            id, rating, comment, created_at,
-            reviewer:reviewer_id(first_name, last_name, avatar_url)
+          profiles:profile_id (
+            first_name,
+            last_name,
+            avatar_url,
+            created_at
+          ),
+          listing_features:id (
+            feature,
+            value
           )
         `)
         .eq('id', id)
         .single();
-
-      if (error) throw error;
-      return data as unknown as ListingWithFeatures;
-    },
-  });
-
-  // Create booking mutation
-  const createBooking = useMutation({
-    mutationFn: async (booking: {
-      listing_id: string;
-      start_time: Date;
-      end_time: Date;
-      total_price: number;
-    }) => {
-      // First get the current user
-      const user = await getCurrentUser();
-      if (!user) throw new Error('You must be logged in to book');
-
-      const { data, error } = await supabase
-        .from('bookings')
-        .insert({
-          listing_id: booking.listing_id,
-          user_id: user.id,
-          start_time: booking.start_time.toISOString(),
-          end_time: booking.end_time.toISOString(),
-          total_price: booking.total_price,
-          status: 'pending',
-        })
-        .select()
-        .single();
-
+      
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    enabled: !!id,
+  });
+
+  // Fetch reviews
+  const { data: reviews = [] } = useQuery({
+    queryKey: ['reviews', id],
+    queryFn: async () => {
+      if (!id) return [];
+      
+      const { data, error } = await supabase
+        .from('reviews')
+        .select(`
+          *,
+          profiles:user_id (
+            first_name,
+            last_name,
+            avatar_url
+          )
+        `)
+        .eq('listing_id', id)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+
+  // Check if listing is in user's favorites
+  useQuery({
+    queryKey: ['favorite', id, user?.id],
+    queryFn: async () => {
+      if (!id || !user?.id) return null;
+      
+      const { data, error } = await supabase
+        .from('favorites')
+        .select('id')
+        .eq('listing_id', id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (error) throw error;
+      setIsFavorite(!!data);
+      return data;
+    },
+    enabled: !!id && !!user?.id,
+  });
+
+  // Toggle favorite mutation
+  const toggleFavorite = useMutation({
+    mutationFn: async () => {
+      if (!id || !user?.id) throw new Error('Not authenticated');
+      
+      if (isFavorite) {
+        // Remove from favorites
+        const { error } = await supabase
+          .from('favorites')
+          .delete()
+          .eq('listing_id', id)
+          .eq('user_id', user.id);
+        
+        if (error) throw error;
+        return false;
+      } else {
+        // Add to favorites
+        const { error } = await supabase
+          .from('favorites')
+          .insert({
+            listing_id: id,
+            user_id: user.id,
+          });
+        
+        if (error) throw error;
+        return true;
+      }
+    },
+    onSuccess: (isFav) => {
+      setIsFavorite(isFav);
       toast({
-        title: 'Booking Request Sent',
-        description: 'Your booking request has been submitted successfully.',
+        title: isFav ? "Added to favorites" : "Removed from favorites",
+        description: isFav 
+          ? "This parking spot has been added to your favorites" 
+          : "This parking spot has been removed from your favorites",
       });
-      // Redirect to dashboard
-      navigate('/dashboard');
+      queryClient.invalidateQueries({ queryKey: ['favorite', id, user?.id] });
     },
     onError: (error) => {
       toast({
-        title: 'Booking Failed',
-        description: error.message || 'There was an error creating your booking.',
-        variant: 'destructive',
+        title: "Error",
+        description: `Failed to update favorites: ${error.message}`,
+        variant: "destructive",
       });
     },
   });
 
-  // Calculate total price based on selected dates
-  const calculateTotalPrice = () => {
-    if (!listing || !dateFrom || !dateTo) return 0;
-    
-    const days = Math.ceil((dateTo.getTime() - dateFrom.getTime()) / (1000 * 60 * 60 * 24));
-    
-    if (days <= 1) {
-      return listing.hourly_rate * 24; // Full day rate
-    } else if (days <= 30) {
-      return (listing.daily_rate || listing.hourly_rate * 20) * days;
-    } else {
-      return (listing.monthly_rate || listing.daily_rate! * 25) * Math.ceil(days / 30);
-    }
-  };
-
-  // Handle booking submission
-  const handleBookNow = async () => {
-    if (!listing || !dateFrom || !dateTo) {
+  // Handle favorite toggle
+  const handleFavoriteToggle = () => {
+    if (!user) {
       toast({
-        title: 'Incomplete Information',
-        description: 'Please select a valid date range for your booking.',
-        variant: 'destructive',
+        title: "Authentication required",
+        description: "Please sign in to save favorites",
+        variant: "destructive",
       });
+      navigate('/auth');
       return;
     }
+    
+    toggleFavorite.mutate();
+  };
 
-    try {
-      await createBooking.mutateAsync({
-        listing_id: listing.id,
-        start_time: dateFrom,
-        end_time: dateTo,
-        total_price: calculateTotalPrice(),
+  // Handle share
+  const handleShare = () => {
+    if (navigator.share) {
+      navigator.share({
+        title: listing?.title || 'Parking Spot',
+        text: `Check out this parking spot: ${listing?.title}`,
+        url: window.location.href,
+      }).catch(err => {
+        console.error('Error sharing:', err);
       });
-    } catch (error) {
-      console.error('Booking error:', error);
+    } else {
+      // Fallback for browsers that don't support navigator.share
+      navigator.clipboard.writeText(window.location.href);
+      toast({
+        title: "Link copied",
+        description: "Parking spot link copied to clipboard",
+      });
     }
   };
 
-  const totalPrice = calculateTotalPrice();
-  const featureIcons: Record<string, React.ReactNode> = {
-    'covered': <Car className="h-4 w-4" />,
-    'underground': <Layers className="h-4 w-4" />,
-    'security_camera': <CameraIcon className="h-4 w-4" />,
-    'gated': <ShieldCheck className="h-4 w-4" />,
-    '24_7_access': <Clock className="h-4 w-4" />,
-    'electric_charging': <Wifi className="h-4 w-4" />,
+  // Calculate average rating
+  const averageRating = reviews.length > 0
+    ? reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length
+    : 0;
+
+  // Format features
+  const formatFeatures = () => {
+    if (!listing?.listing_features) return [];
+    
+    const featureLabels: Record<string, string> = {
+      security_camera: "Security Camera",
+      covered: "Covered Parking",
+      electric_charging: "EV Charging",
+      overnight: "Overnight Parking",
+      accessible: "Accessible Parking",
+    };
+    
+    return listing.listing_features
+      .filter(f => f.value === 'true' || f.value === true)
+      .map(f => featureLabels[f.feature] || f.feature);
   };
 
-  // Show loading state
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />
-        <main className="flex-1 container mx-auto px-4 py-16">
-          <div className="animate-pulse space-y-8">
-            <div className="h-6 bg-gray-200 rounded w-3/4"></div>
-            <div className="h-64 bg-gray-200 rounded"></div>
-            <div className="space-y-4">
-              <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-              <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-              <div className="h-4 bg-gray-200 rounded w-4/6"></div>
-            </div>
-          </div>
-        </main>
+        <div className="flex-grow flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-parkongo-600"></div>
+        </div>
         <Footer />
       </div>
     );
   }
 
-  // Show error state
-  if (error || !listing) {
+  if (!listing) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />
-        <main className="flex-1 container mx-auto px-4 py-16">
-          <Card className="max-w-3xl mx-auto">
-            <CardHeader>
-              <CardTitle>Error Loading Parking Space</CardTitle>
-              <CardDescription>
-                We couldn't load the details for this parking space.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-red-500">
-                {error instanceof Error ? error.message : 'An unknown error occurred'}
-              </p>
-            </CardContent>
-            <CardFooter>
-              <Button onClick={() => navigate('/search')}>
-                Return to Search
-              </Button>
-            </CardFooter>
-          </Card>
-        </main>
+        <div className="flex-grow flex flex-col items-center justify-center p-4">
+          <h1 className="text-2xl font-bold mb-4">Parking Spot Not Found</h1>
+          <p className="text-gray-600 mb-6">The parking spot you're looking for doesn't exist or has been removed.</p>
+          <Button onClick={() => navigate('/search')}>
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back to Search
+          </Button>
+        </div>
         <Footer />
       </div>
     );
   }
-
-  // Calculate average rating
-  const avgRating = listing.reviews.length > 0
-    ? listing.reviews.reduce((sum, review) => sum + review.rating, 0) / listing.reviews.length
-    : 0;
 
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
       
-      <main className="flex-1 pt-16 bg-gray-50">
-        <div className="container mx-auto px-4 py-8">
-          {/* Listing Title and Location */}
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold mb-2">{listing.title}</h1>
-            <div className="flex items-center text-gray-600">
-              <MapPin className="h-4 w-4 mr-1" />
-              <span>{`${listing.address}, ${listing.city}, ${listing.state} ${listing.zipcode}`}</span>
-            </div>
-          </div>
+      <main className="flex-grow pt-20 pb-16">
+        <div className="container mx-auto px-4 md:px-6 py-8">
+          {/* Back button */}
+          <Button 
+            variant="ghost" 
+            className="mb-4" 
+            onClick={() => navigate(-1)}
+          >
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
           
-          {/* Gallery */}
-          <div className="mb-10">
-            {listing.images && listing.images.length > 0 ? (
-              <Carousel className="w-full">
-                <CarouselContent>
-                  {listing.images.map((image, index) => (
-                    <CarouselItem key={index} className="basis-full md:basis-1/2 lg:basis-1/3">
-                      <Card className="border-0">
-                        <CardContent className="p-1">
-                          <img 
-                            src={image} 
-                            alt={`View ${index + 1} of ${listing.title}`}
-                            className="rounded-lg object-cover w-full h-64" 
-                          />
-                        </CardContent>
-                      </Card>
-                    </CarouselItem>
-                  ))}
-                </CarouselContent>
-                <CarouselPrevious className="left-2" />
-                <CarouselNext className="right-2" />
-              </Carousel>
-            ) : (
-              <div className="rounded-lg bg-gray-200 w-full h-64 flex justify-center items-center">
-                <p className="text-gray-500">No images available</p>
-              </div>
-            )}
-          </div>
-          
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Listing Details */}
-            <div className="lg:col-span-2">
-              {/* Host Info */}
-              <div className="flex items-center mb-6">
-                <div className="bg-gray-200 rounded-full h-12 w-12 overflow-hidden mr-3">
-                  {listing.profile.avatar_url ? (
-                    <img 
-                      src={listing.profile.avatar_url} 
-                      alt={`${listing.profile.first_name} ${listing.profile.last_name}`}
-                      className="w-full h-full object-cover" 
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <User className="h-6 w-6 text-gray-500" />
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-medium">Hosted by {listing.profile.first_name} {listing.profile.last_name}</h3>
-                  {avgRating > 0 && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Star className="h-3.5 w-3.5 text-yellow-500 fill-yellow-500 mr-1" />
-                      <span>{avgRating.toFixed(1)} ({listing.reviews.length} reviews)</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-              {/* Description */}
-              <div className="mb-8">
-                <h2 className="text-xl font-semibold mb-3">About this space</h2>
-                <p className="text-gray-700">{listing.description}</p>
-              </div>
-              
-              {/* Features */}
-              <div className="mb-8">
-                <h2 className="text-xl font-semibold mb-3">Features</h2>
-                <div className="flex flex-wrap gap-2">
-                  {listing.listing_features.map((feature) => (
-                    <Badge 
-                      key={feature.id} 
-                      variant="secondary"
-                      className="flex items-center gap-1 px-3 py-1"
-                    >
-                      {featureIcons[feature.feature.toLowerCase()] || <Layers className="h-4 w-4" />}
-                      {feature.feature.replace('_', ' ')}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-              
-              {/* Reviews */}
-              <div>
-                <h2 className="text-xl font-semibold mb-3">
-                  Reviews {listing.reviews.length > 0 && `(${listing.reviews.length})`}
-                </h2>
-                
-                {listing.reviews.length > 0 ? (
-                  <div className="space-y-6">
-                    {listing.reviews.map((review) => (
-                      <div key={review.id} className="bg-white p-4 rounded-lg shadow-sm">
-                        <div className="flex items-center mb-2">
-                          <div className="bg-gray-200 rounded-full h-10 w-10 overflow-hidden mr-3">
-                            {review.reviewer.avatar_url ? (
-                              <img 
-                                src={review.reviewer.avatar_url} 
-                                alt={`${review.reviewer.first_name} ${review.reviewer.last_name}`}
-                                className="w-full h-full object-cover" 
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center">
-                                <User className="h-5 w-5 text-gray-500" />
-                              </div>
-                            )}
-                          </div>
-                          <div>
-                            <div className="font-medium">{review.reviewer.first_name} {review.reviewer.last_name}</div>
-                            <div className="text-sm text-gray-500">
-                              {format(new Date(review.created_at), 'MMMM yyyy')}
-                            </div>
-                          </div>
-                          <div className="ml-auto flex items-center">
-                            <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 mr-1" />
-                            <span>{review.rating}</span>
-                          </div>
-                        </div>
-                        <p className="text-gray-700">{review.comment}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-500">No reviews yet</p>
-                )}
+          {/* Listing Title and Actions */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+            <div>
+              <h1 className="text-3xl font-bold">{listing.title}</h1>
+              <div className="flex items-center mt-2 text-gray-600">
+                <MapPin className="h-4 w-4 mr-1" />
+                <span>{listing.address}, {listing.city}, {listing.state}</span>
               </div>
             </div>
             
-            {/* Booking Card */}
-            <div className="lg:col-span-1">
-              <Card className="sticky top-24">
-                <CardHeader>
-                  <CardTitle className="flex items-end justify-between">
-                    <div>
-                      <span className="text-2xl font-bold">₹{listing.hourly_rate}</span>
-                      <span className="text-gray-500 text-sm">/hour</span>
-                    </div>
-                    {avgRating > 0 && (
-                      <div className="flex items-center text-sm">
-                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 mr-1" />
-                        <span>{avgRating.toFixed(1)}</span>
-                      </div>
-                    )}
-                  </CardTitle>
-                  {listing.daily_rate && (
-                    <CardDescription>
-                      Daily: ₹{listing.daily_rate} · Monthly: ₹{listing.monthly_rate || listing.daily_rate * 25}
-                    </CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Date Range */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">From</label>
-                      <Popover open={isDateFromOpen} onOpenChange={setIsDateFromOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !dateFrom && "text-muted-foreground"
-                            )}
-                          >
-                            <Calendar className="mr-2 h-4 w-4" />
-                            {dateFrom ? format(dateFrom, "PPP") : "Pick a date"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <CalendarComponent
-                            mode="single"
-                            selected={dateFrom}
-                            onSelect={(date) => {
-                              setDateFrom(date);
-                              setIsDateFromOpen(false);
-                            }}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">To</label>
-                      <Popover open={isDateToOpen} onOpenChange={setIsDateToOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !dateTo && "text-muted-foreground"
-                            )}
-                          >
-                            <Calendar className="mr-2 h-4 w-4" />
-                            {dateTo ? format(dateTo, "PPP") : "Pick a date"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <CalendarComponent
-                            mode="single"
-                            selected={dateTo}
-                            onSelect={(date) => {
-                              setDateTo(date);
-                              setIsDateToOpen(false);
-                            }}
-                            initialFocus
-                            disabled={(date) => 
-                              dateFrom ? date < dateFrom : false
-                            }
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+            <div className="flex items-center mt-4 md:mt-0 space-x-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className={isFavorite ? "text-red-500" : ""}
+                onClick={handleFavoriteToggle}
+              >
+                <Heart className={`mr-1 h-4 w-4 ${isFavorite ? "fill-red-500 text-red-500" : ""}`} />
+                {isFavorite ? "Saved" : "Save"}
+              </Button>
+              
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={handleShare}
+              >
+                <Share2 className="mr-1 h-4 w-4" />
+                Share
+              </Button>
+            </div>
+          </div>
+          
+          {/* Main Content */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Left Column - Listing Details */}
+            <div className="lg:col-span-8 xl:col-span-9">
+              {/* Images */}
+              <div className="mb-8 rounded-xl overflow-hidden">
+                {listing.images && listing.images.length > 0 ? (
+                  <div className="aspect-video bg-gray-100">
+                    <img 
+                      src={listing.images[0]} 
+                      alt={listing.title} 
+                      className="w-full h-full object-cover"
+                    />
                   </div>
-                  
-                  {/* Price Breakdown */}
-                  <div className="border-t border-b py-4 space-y-2">
-                    <div className="flex justify-between">
-                      <span>Parking fee</span>
-                      <span>₹{totalPrice.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Service fee</span>
-                      <span>₹{(totalPrice * 0.10).toFixed(2)}</span>
-                    </div>
-                    <Separator className="my-2" />
-                    <div className="flex justify-between font-bold">
-                      <span>Total</span>
-                      <span>₹{(totalPrice * 1.10).toFixed(2)}</span>
+                ) : (
+                  <div className="aspect-video bg-gray-100 flex items-center justify-center">
+                    <Car className="h-16 w-16 text-gray-400" />
+                  </div>
+                )}
+              </div>
+              
+              {/* Tabs */}
+              <Tabs defaultValue="details" className="mb-8">
+                <TabsList className="grid grid-cols-3 mb-6">
+                  <TabsTrigger value="details">Details</TabsTrigger>
+                  <TabsTrigger value="features">Features</TabsTrigger>
+                  <TabsTrigger value="reviews">Reviews</TabsTrigger>
+                </TabsList>
+                
+                {/* Details Tab */}
+                <TabsContent value="details">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>About this parking space</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <h3 className="font-medium mb-2">Description</h3>
+                        <p className="text-gray-600">
+                          {listing.description || "No description provided."}
+                        </p>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <h3 className="font-medium mb-2">Space Details</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          <div>
+                            <p className="text-sm text-gray-500">Space Type</p>
+                            <p className="font-medium">
+                              {listing.space_type?.charAt(0).toUpperCase() + listing.space_type?.slice(1) || "Standard"}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Hourly Rate</p>
+                            <p className="font-medium">₹{listing.hourly_rate}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">Size</p>
+                            <p className="font-medium">
+                              {listing.size || "Standard"}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <Separator />
+                      
+                      <div>
+                        <h3 className="font-medium mb-2">Location</h3>
+                        <div className="aspect-video bg-gray-100 rounded-md">
+                          {/* Map would go here in a real implementation */}
+                          <div className="w-full h-full flex items-center justify-center">
+                            <MapPin className="h-8 w-8 text-gray-400 mr-2" />
+                            <span className="text-gray-500">Map view not available</span>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-sm text-gray-600">
+                          {listing.address}, {listing.city}, {listing.state} {listing.zipcode}
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                
+                {/* Features Tab */}
+                <TabsContent value="features">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Parking Space Features</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {formatFeatures().length > 0 ? (
+                          formatFeatures().map((feature, index) => (
+                            <div key={index} className="flex items-center">
+                              <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
+                              <span>{feature}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-gray-500">No specific features listed for this parking space.</p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                
+                {/* Reviews Tab */}
+                <TabsContent value="reviews">
+                  <Card>
+                    <CardHeader>
+                      <div className="flex justify-between items-center">
+                        <CardTitle>Reviews</CardTitle>
+                        <div className="flex items-center">
+                          <Star className="h-5 w-5 text-yellow-400 fill-yellow-400 mr-1" />
+                          <span className="font-bold">{averageRating.toFixed(1)}</span>
+                          <span className="text-gray-500 ml-1">({reviews.length} reviews)</span>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {reviews.length > 0 ? (
+                        <div className="space-y-6">
+                          {reviews.map((review) => (
+                            <div key={review.id} className="border-b pb-4 last:border-0">
+                              <div className="flex justify-between items-start mb-2">
+                                <div className="flex items-center">
+                                  <Avatar className="h-8 w-8 mr-2">
+                                    <AvatarImage src={review.profiles?.avatar_url || ''} />
+                                    <AvatarFallback>
+                                      {review.profiles?.first_name?.[0] || ''}{review.profiles?.last_name?.[0] || ''}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <div>
+                                    <p className="font-medium">
+                                      {review.profiles?.first_name} {review.profiles?.last_name}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      {new Date(review.created_at).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center">
+                                  {[...Array(5)].map((_, i) => (
+                                    <Star 
+                                      key={i} 
+                                      className={`h-4 w-4 ${i < review.rating ? "text-yellow-400 fill-yellow-400" : "text-gray-300"}`} 
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                              <p className="text-gray-700">{review.comment}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <Star className="h-12 w-12 mx-auto text-gray-300 mb-2" />
+                          <h3 className="text-lg font-medium mb-1">No reviews yet</h3>
+                          <p className="text-gray-500">This parking space hasn't received any reviews yet.</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+              
+              {/* Host Information */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>About the Host</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center">
+                    <Avatar className="h-12 w-12 mr-4">
+                      <AvatarImage src={listing.profiles?.avatar_url || ''} />
+                      <AvatarFallback>
+                        {listing.profiles?.first_name?.[0] || ''}{listing.profiles?.last_name?.[0] || ''}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <h3 className="font-medium">
+                        {listing.profiles?.first_name} {listing.profiles?.last_name}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        Host since {new Date(listing.profiles?.created_at || '').toLocaleDateString()}
+                      </p>
                     </div>
                   </div>
                 </CardContent>
-                <CardFooter>
-                  <Button 
-                    className="w-full" 
-                    onClick={handleBookNow}
-                    disabled={createBooking.isPending}
-                  >
-                    {createBooking.isPending ? "Processing..." : "Book Now"}
-                  </Button>
-                </CardFooter>
-                <div className="px-6 pb-4 text-center text-sm text-gray-500">
-                  You won't be charged yet
-                </div>
+              </Card>
+            </div>
+            
+            {/* Right Column - Booking Form */}
+            <div className="lg:col-span-4 xl:col-span-3">
+              <BookingForm 
+                listingId={listing?.id || ''} 
+                title={listing?.title || 'Parking Spot'} 
+                hourlyRate={listing?.hourly_rate || 0}
+              />
+              
+              <Card className="mt-4">
+                <CardContent className="pt-6">
+                  <div className="flex items-center mb-4">
+                    <Shield className="h-5 w-5 text-parkongo-600 mr-2" />
+                    <h3 className="font-medium">Secure Booking</h3>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Your booking is protected by our secure payment system and cancellation policy.
+                  </p>
+                </CardContent>
               </Card>
             </div>
           </div>

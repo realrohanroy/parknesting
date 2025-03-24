@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -10,15 +10,38 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import Button from '@/components/Button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from '@/components/ui/table';
 import { toast } from '@/hooks/use-toast';
-import { User, Car, Calendar, CreditCard, Clock, ParkingCircle, Settings, Bell, LogOut } from 'lucide-react';
+import { 
+  User, 
+  Car, 
+  Calendar, 
+  CreditCard, 
+  Clock, 
+  ParkingCircle, 
+  Settings, 
+  Bell, 
+  LogOut,
+  Home,
+  Star
+} from 'lucide-react';
+
 import { supabase } from '@/integrations/supabase/client';
 import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/use-auth';
+import { BookingsList } from '@/components/BookingsList';
+import { Badge } from '@/components/ui/badge';
 
 // Zod schemas for form validation
 const ProfileSchema = z.object({
@@ -81,52 +104,55 @@ type Favorite = {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
+  const { user, signOut } = useAuth();
+  const [activeTab, setActiveTab] = useState('overview');
   const [hostApplicationSubmitted, setHostApplicationSubmitted] = useState(false);
   const [hostApplicationStatus, setHostApplicationStatus] = useState<string | null>(null);
-  
-  // Fetch user and check if logged in
-  const { data: session } = useQuery({
-    queryKey: ['session'],
-    queryFn: async () => {
-      const { data } = await supabase.auth.getSession();
-      return data.session;
-    },
-  });
 
+  // Get tab from URL query params
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const tab = searchParams.get('tab');
+    if (tab && ['overview', 'profile', 'vehicles', 'bookings', 'listings'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [location]);
+  
   // If not logged in, redirect to auth page
   useEffect(() => {
-    if (session === null) {
+    if (!user) {
       navigate('/auth');
     }
-  }, [session, navigate]);
+  }, [user, navigate]);
 
   // Fetch profile data
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['profile'],
     queryFn: async () => {
-      if (!session?.user?.id) return null;
+      if (!user?.id) return null;
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
-        .eq('id', session.user.id)
+        .eq('id', user.id)
         .single();
       
       if (error) throw error;
       return data as Profile;
     },
-    enabled: !!session?.user?.id,
+    enabled: !!user?.id,
   });
 
   // Fetch host application status
   useQuery({
     queryKey: ['hostApplication'],
     queryFn: async () => {
-      if (!session?.user?.id) return null;
+      if (!user?.id) return null;
       const { data, error } = await supabase
         .from('host_applications')
         .select('status')
-        .eq('user_id', session.user.id)
+        .eq('user_id', user.id)
         .single();
       
       if (error && error.code !== 'PGRST116') throw error;
@@ -136,58 +162,65 @@ const Dashboard: React.FC = () => {
       }
       return data;
     },
-    enabled: !!session?.user?.id,
+    enabled: !!user?.id,
   });
 
   // Fetch user vehicles
   const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery({
     queryKey: ['vehicles'],
     queryFn: async () => {
-      if (!session?.user?.id) return [];
+      if (!user?.id) return [];
       const { data, error } = await supabase
         .from('vehicles')
         .select('*')
-        .eq('user_id', session.user.id)
+        .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
       return data as Vehicle[];
     },
-    enabled: !!session?.user?.id,
+    enabled: !!user?.id,
   });
 
-  // Fetch bookings
-  const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
-    queryKey: ['bookings'],
+  // Fetch user listings (if host)
+  const { data: listings = [], isLoading: listingsLoading } = useQuery({
+    queryKey: ['listings'],
     queryFn: async () => {
-      if (!session?.user?.id) return [];
+      if (!user?.id) return [];
       const { data, error } = await supabase
-        .from('bookings')
-        .select('id, listing_id, start_time, end_time, status, total_price, listing:listings(title)')
-        .eq('user_id', session.user.id)
+        .from('listings')
+        .select('*')
+        .eq('profile_id', user.id)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return data as Booking[];
+      return data;
     },
-    enabled: !!session?.user?.id,
+    enabled: !!user?.id && profile?.role === 'host',
   });
 
-  // Fetch favorites
-  const { data: favorites = [], isLoading: favoritesLoading } = useQuery({
-    queryKey: ['favorites'],
+  // Fetch stats for listings (if host)
+  const { data: listingStats = {}, isLoading: statsLoading } = useQuery({
+    queryKey: ['listingStats'],
     queryFn: async () => {
-      if (!session?.user?.id) return [];
+      if (!user?.id || profile?.role !== 'host') return {};
+      
       const { data, error } = await supabase
-        .from('favorites')
-        .select('id, listing_id, created_at, listing:listings(title, address)')
-        .eq('user_id', session.user.id)
-        .order('created_at', { ascending: false });
+        .from('listing_stats')
+        .select('*')
+        .eq('profile_id', user.id);
       
       if (error) throw error;
-      return data as Favorite[];
+      
+      // Transform data into a map for easier access
+      const statsMap = {};
+      data.forEach(stat => {
+        statsMap[stat.listing_id] = stat;
+      });
+      
+      return statsMap;
     },
-    enabled: !!session?.user?.id,
+    enabled: !!user?.id && profile?.role === 'host' && listings.length > 0,
   });
 
   // Profile form
@@ -228,7 +261,7 @@ const Dashboard: React.FC = () => {
   // Update profile mutation
   const updateProfile = useMutation({
     mutationFn: async (values: z.infer<typeof ProfileSchema>) => {
-      if (!session?.user?.id) throw new Error('Not authenticated');
+      if (!user?.id) throw new Error('Not authenticated');
       
       const { error } = await supabase
         .from('profiles')
@@ -237,7 +270,7 @@ const Dashboard: React.FC = () => {
           last_name: values.last_name,
           bio: values.bio,
         })
-        .eq('id', session.user.id);
+        .eq('id', user.id);
       
       if (error) throw error;
       return values;
@@ -261,12 +294,12 @@ const Dashboard: React.FC = () => {
   // Add vehicle mutation
   const addVehicle = useMutation({
     mutationFn: async (values: z.infer<typeof VehicleSchema>) => {
-      if (!session?.user?.id) throw new Error('Not authenticated');
+      if (!user?.id) throw new Error('Not authenticated');
       
       const { error } = await supabase
         .from('vehicles')
         .insert({
-          user_id: session.user.id,
+          user_id: user.id,
           make: values.make,
           model: values.model,
           year: values.year ? parseInt(values.year) : null,
@@ -297,12 +330,12 @@ const Dashboard: React.FC = () => {
   // Host application mutation
   const applyForHost = useMutation({
     mutationFn: async () => {
-      if (!session?.user?.id) throw new Error('Not authenticated');
+      if (!user?.id) throw new Error('Not authenticated');
       
       const { error } = await supabase
         .from('host_applications')
         .insert({
-          user_id: session.user.id,
+          user_id: user.id,
         });
       
       if (error) throw error;
@@ -343,23 +376,23 @@ const Dashboard: React.FC = () => {
 
   // Handle logout
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
+    try {
+      await signOut();
+      toast({
+        title: "Logged Out",
+        description: "You have been logged out successfully.",
+      });
+      navigate('/');
+    } catch (error) {
       toast({
         title: "Error",
         description: `Failed to log out: ${error.message}`,
         variant: "destructive",
       });
-    } else {
-      navigate('/');
-      toast({
-        title: "Logged Out",
-        description: "You have been logged out successfully.",
-      });
     }
   };
 
-  if (!session) {
+  if (!user) {
     return <div className="min-h-screen flex items-center justify-center">Redirecting to login...</div>;
   }
 
@@ -383,7 +416,7 @@ const Dashboard: React.FC = () => {
                   <h2 className="text-xl font-bold">
                     {profile?.first_name} {profile?.last_name}
                   </h2>
-                  <p className="text-gray-500 text-sm mt-1">{session.user.email}</p>
+                  <p className="text-gray-500 text-sm mt-1">{user.email}</p>
                   <p className="text-gray-400 text-xs mt-1">
                     Member since {new Date(profile?.created_at || '').toLocaleDateString()}
                   </p>
@@ -408,21 +441,51 @@ const Dashboard: React.FC = () => {
                 </div>
                 
                 <nav className="space-y-2">
-                  <a href="#profile" className="flex items-center gap-3 p-2.5 rounded-lg bg-parkongo-50 text-parkongo-700 font-medium">
+                  <a 
+                    href="#overview" 
+                    className={`flex items-center gap-3 p-2.5 rounded-lg ${activeTab === 'overview' ? 'bg-parkongo-50 text-parkongo-700' : 'hover:bg-gray-50 text-gray-700'} font-medium`}
+                    onClick={() => setActiveTab('overview')}
+                  >
+                    <Home className="h-5 w-5" />
+                    <span>Overview</span>
+                  </a>
+                  <a 
+                    href="#profile" 
+                    className={`flex items-center gap-3 p-2.5 rounded-lg ${activeTab === 'profile' ? 'bg-parkongo-50 text-parkongo-700' : 'hover:bg-gray-50 text-gray-700'} font-medium`}
+                    onClick={() => setActiveTab('profile')}
+                  >
                     <User className="h-5 w-5" />
                     <span>Profile</span>
                   </a>
-                  <a href="#bookings" className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium">
+                  <a 
+                    href="#bookings" 
+                    className={`flex items-center gap-3 p-2.5 rounded-lg ${activeTab === 'bookings' ? 'bg-parkongo-50 text-parkongo-700' : 'hover:bg-gray-50 text-gray-700'} font-medium`}
+                    onClick={() => setActiveTab('bookings')}
+                  >
                     <Calendar className="h-5 w-5" />
                     <span>Bookings</span>
                   </a>
-                  <a href="#vehicles" className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium">
+                  <a 
+                    href="#vehicles" 
+                    className={`flex items-center gap-3 p-2.5 rounded-lg ${activeTab === 'vehicles' ? 'bg-parkongo-50 text-parkongo-700' : 'hover:bg-gray-50 text-gray-700'} font-medium`}
+                    onClick={() => setActiveTab('vehicles')}
+                  >
                     <Car className="h-5 w-5" />
                     <span>Vehicles</span>
                   </a>
+                  {profile?.role === 'host' && (
+                    <a 
+                      href="#listings" 
+                      className={`flex items-center gap-3 p-2.5 rounded-lg ${activeTab === 'listings' ? 'bg-parkongo-50 text-parkongo-700' : 'hover:bg-gray-50 text-gray-700'} font-medium`}
+                      onClick={() => setActiveTab('listings')}
+                    >
+                      <ParkingCircle className="h-5 w-5" />
+                      <span>My Listings</span>
+                    </a>
+                  )}
                   <a href="#favorites" className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium">
-                    <ParkingCircle className="h-5 w-5" />
-                    <span>Favorite Spaces</span>
+                    <Star className="h-5 w-5" />
+                    <span>Favorites</span>
                   </a>
                   <a href="#payments" className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 text-gray-700 font-medium">
                     <CreditCard className="h-5 w-5" />
@@ -449,11 +512,15 @@ const Dashboard: React.FC = () => {
             
             {/* Main Content */}
             <div className="lg:col-span-3">
-              <Tabs defaultValue="overview">
+              <Tabs value={activeTab} onValueChange={setActiveTab}>
                 <TabsList className="grid grid-cols-3 mb-6">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="profile">Profile</TabsTrigger>
-                  <TabsTrigger value="vehicles">Vehicles</TabsTrigger>
+                  <TabsTrigger value="bookings">Bookings</TabsTrigger>
+                  {profile?.role === 'host' ? (
+                    <TabsTrigger value="listings">Listings</TabsTrigger>
+                  ) : (
+                    <TabsTrigger value="profile">Profile</TabsTrigger>
+                  )}
                 </TabsList>
                 
                 {/* Overview Tab */}
@@ -468,62 +535,75 @@ const Dashboard: React.FC = () => {
                     </CardHeader>
                   </Card>
                   
-                  {/* Recent Bookings */}
+                  {/* Host Section - Only shown for hosts */}
+                  {profile?.role === 'host' && (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-lg">Host Dashboard</CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        {/* Host Stats */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
+                          <div className="bg-parkongo-50 p-4 rounded-lg">
+                            <h3 className="text-sm text-gray-500 mb-1">Listed Spaces</h3>
+                            <p className="text-2xl font-bold">{listings.length}</p>
+                          </div>
+                          <div className="bg-blue-50 p-4 rounded-lg">
+                            <h3 className="text-sm text-gray-500 mb-1">Active Bookings</h3>
+                            <p className="text-2xl font-bold">
+                              {Object.values(listingStats).reduce((acc: number, stat: any) => 
+                                acc + (stat.total_bookings - stat.completed_bookings - stat.cancelled_bookings), 0)}
+                            </p>
+                          </div>
+                          <div className="bg-green-50 p-4 rounded-lg">
+                            <h3 className="text-sm text-gray-500 mb-1">Total Reviews</h3>
+                            <p className="text-2xl font-bold">
+                              {Object.values(listingStats).reduce((acc: number, stat: any) => 
+                                acc + (stat.review_count || 0), 0)}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {/* Quick Actions */}
+                        <div className="p-4 pt-0">
+                          <h3 className="text-sm font-medium mb-3">Quick Actions</h3>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => navigate('/for-hosts')}
+                            >
+                              + Add New Listing
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setActiveTab('bookings')}
+                            >
+                              Manage Bookings
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {/* Bookings Card */}
                   <Card>
                     <CardHeader className="pb-3">
                       <CardTitle className="text-lg">Recent Bookings</CardTitle>
                     </CardHeader>
-                    <CardContent className="p-0">
-                      {bookingsLoading ? (
-                        <div className="p-4 text-center">Loading bookings...</div>
-                      ) : bookings.length === 0 ? (
-                        <div className="p-4 text-center text-gray-500">No bookings found.</div>
-                      ) : (
-                        <div className="overflow-x-auto">
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>ID</TableHead>
-                                <TableHead>Space</TableHead>
-                                <TableHead>Date</TableHead>
-                                <TableHead>Time</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Amount</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {bookings.slice(0, 3).map((booking) => (
-                                <TableRow key={booking.id}>
-                                  <TableCell className="font-medium">{booking.id.split('-')[0]}</TableCell>
-                                  <TableCell>{booking.listing?.title || 'Unknown'}</TableCell>
-                                  <TableCell>{new Date(booking.start_time).toLocaleDateString()}</TableCell>
-                                  <TableCell>
-                                    {new Date(booking.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
-                                    {new Date(booking.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  </TableCell>
-                                  <TableCell>
-                                    <span className={`px-2 py-1 rounded-full text-xs ${
-                                      booking.status === 'completed' 
-                                        ? 'bg-green-100 text-green-800' 
-                                        : booking.status === 'pending'
-                                          ? 'bg-yellow-100 text-yellow-800'
-                                          : booking.status === 'cancelled'
-                                            ? 'bg-red-100 text-red-800'
-                                            : 'bg-blue-100 text-blue-800'
-                                    }`}>
-                                      {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
-                                    </span>
-                                  </TableCell>
-                                  <TableCell>₹{booking.total_price}</TableCell>
-                                </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
-                        </div>
-                      )}
+                    <CardContent>
+                      <BookingsList type="user" />
                     </CardContent>
                     <CardFooter className="pt-3">
-                      <Button variant="outline" className="w-full">View All Bookings</Button>
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={() => setActiveTab('bookings')}
+                      >
+                        View All Bookings
+                      </Button>
                     </CardFooter>
                   </Card>
                   
@@ -531,29 +611,69 @@ const Dashboard: React.FC = () => {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Card>
                       <CardHeader className="pb-2">
-                        <CardTitle className="text-sm text-gray-500">Total Bookings</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-3xl font-bold">{bookings.length}</p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm text-gray-500">Favorite Spaces</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-3xl font-bold">{favorites.length}</p>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm text-gray-500">Registered Vehicles</CardTitle>
+                        <CardTitle className="text-sm text-gray-500">Vehicles</CardTitle>
                       </CardHeader>
                       <CardContent>
                         <p className="text-3xl font-bold">{vehicles.length}</p>
                       </CardContent>
                     </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-gray-500">Host Status</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-xl font-medium">
+                          {profile?.role === 'host' 
+                            ? "Active Host" 
+                            : hostApplicationSubmitted 
+                              ? `Application ${hostApplicationStatus}` 
+                              : "Not a host"}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm text-gray-500">Joined</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-xl font-medium">
+                          {new Date(profile?.created_at || '').toLocaleDateString()}
+                        </p>
+                      </CardContent>
+                    </Card>
                   </div>
+                </TabsContent>
+                
+                {/* Bookings Tab */}
+                <TabsContent value="bookings" className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Your Bookings</CardTitle>
+                      <CardDescription>
+                        View and manage your parking space bookings.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Tabs defaultValue="user">
+                        <TabsList className="mb-4">
+                          <TabsTrigger value="user">My Bookings</TabsTrigger>
+                          {profile?.role === 'host' && (
+                            <TabsTrigger value="host">Host Bookings</TabsTrigger>
+                          )}
+                        </TabsList>
+                        
+                        <TabsContent value="user">
+                          <BookingsList type="user" />
+                        </TabsContent>
+                        
+                        {profile?.role === 'host' && (
+                          <TabsContent value="host">
+                            <BookingsList type="host" />
+                          </TabsContent>
+                        )}
+                      </Tabs>
+                    </CardContent>
+                  </Card>
                 </TabsContent>
                 
                 {/* Profile Tab */}
@@ -773,6 +893,144 @@ const Dashboard: React.FC = () => {
                     </CardContent>
                   </Card>
                 </TabsContent>
+
+                {/* Listings Tab (Only for hosts) */}
+                {profile?.role === 'host' && (
+                  <TabsContent value="listings" className="space-y-6">
+                    <Card>
+                      <CardHeader>
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <CardTitle>Your Parking Spaces</CardTitle>
+                            <CardDescription>
+                              Manage your listed parking spaces.
+                            </CardDescription>
+                          </div>
+                          <Button 
+                            onClick={() => navigate('/for-hosts')}
+                            className="bg-parkongo-600 hover:bg-parkongo-700"
+                          >
+                            + Add New Space
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {listingsLoading ? (
+                          <div className="text-center py-4">Loading listings...</div>
+                        ) : listings.length === 0 ? (
+                          <div className="text-center py-8">
+                            <ParkingCircle className="h-12 w-12 mx-auto text-gray-400 mb-2" />
+                            <h3 className="text-lg font-medium mb-2">No listings yet</h3>
+                            <p className="text-gray-500 mb-4">
+                              You haven't created any parking space listings yet.
+                            </p>
+                            <Button 
+                              onClick={() => navigate('/for-hosts')}
+                              className="bg-parkongo-600 hover:bg-parkongo-700"
+                            >
+                              Add Your First Listing
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {listings.map((listing: any) => {
+                              const stats = listingStats[listing.id] || { 
+                                total_bookings: 0, 
+                                completed_bookings: 0,
+                                cancelled_bookings: 0,
+                                average_rating: 0,
+                                review_count: 0
+                              };
+                              
+                              const activeBookings = stats.total_bookings - stats.completed_bookings - stats.cancelled_bookings;
+                              
+                              return (
+                                <Card key={listing.id} className="overflow-hidden border shadow-sm">
+                                  <div className="flex flex-col md:flex-row">
+                                    <div className="md:w-1/3 h-48 md:h-auto relative">
+                                      {listing.images && listing.images[0] ? (
+                                        <img 
+                                          src={listing.images[0]} 
+                                          alt={listing.title} 
+                                          className="w-full h-full object-cover" 
+                                        />
+                                      ) : (
+                                        <div className="w-full h-full bg-gray-200 flex items-center justify-center">
+                                          <ParkingCircle className="h-12 w-12 text-gray-400" />
+                                        </div>
+                                      )}
+                                      <Badge className="absolute top-2 right-2 bg-white text-gray-800 border-0">
+                                        ₹{listing.hourly_rate}/hour
+                                      </Badge>
+                                    </div>
+                                    
+                                    <div className="md:w-2/3 p-4">
+                                      <div className="flex justify-between items-start mb-2">
+                                        <h3 className="text-lg font-semibold">{listing.title}</h3>
+                                        <Badge variant={listing.is_active ? "default" : "outline"}>
+                                          {listing.is_active ? "Active" : "Inactive"}
+                                        </Badge>
+                                      </div>
+                                      
+                                      <p className="text-sm text-gray-500 mb-3">
+                                        {listing.address}, {listing.city}, {listing.state}
+                                      </p>
+                                      
+                                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+                                        <div className="text-center p-2 bg-gray-50 rounded">
+                                          <p className="text-xs text-gray-500">Bookings</p>
+                                          <p className="font-medium">{stats.total_bookings}</p>
+                                        </div>
+                                        <div className="text-center p-2 bg-gray-50 rounded">
+                                          <p className="text-xs text-gray-500">Active</p>
+                                          <p className="font-medium">{activeBookings}</p>
+                                        </div>
+                                        <div className="text-center p-2 bg-gray-50 rounded">
+                                          <p className="text-xs text-gray-500">Rating</p>
+                                          <p className="font-medium flex items-center justify-center">
+                                            <Star className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
+                                            {stats.average_rating.toFixed(1)}
+                                            <span className="text-xs text-gray-400 ml-1">
+                                              ({stats.review_count})
+                                            </span>
+                                          </p>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="flex flex-wrap gap-2">
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm"
+                                          onClick={() => navigate(`/dashboard?tab=bookings`)}
+                                        >
+                                          View Bookings
+                                        </Button>
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm"
+                                          onClick={() => navigate(`/for-hosts`)}
+                                        >
+                                          Edit Listing
+                                        </Button>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => navigate(`/parking/${listing.id}`)}
+                                        >
+                                          View Listing
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </Card>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                )}
               </Tabs>
             </div>
           </div>

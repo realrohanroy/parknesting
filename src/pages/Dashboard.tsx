@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
@@ -13,72 +13,356 @@ import Button from '@/components/Button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/hooks/use-toast';
 import { User, Car, Calendar, CreditCard, Clock, ParkingCircle, Settings, Bell, LogOut } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-// Mocked user data - in a real app, this would come from an API or auth provider
-const userData = {
-  name: 'Alex Johnson',
-  email: 'alex.johnson@example.com',
-  avatar: '/placeholder.svg',
-  phone: '+1 (555) 123-4567',
-  joinDate: 'March 2023',
-  favoriteSpaces: [
-    { id: 1, name: 'Downtown Parking Lot', address: '123 Main St, Downtown', lastUsed: '2 days ago' },
-    { id: 2, name: 'City Center Garage', address: '456 Urban Ave, City Center', lastUsed: '1 week ago' },
-  ],
-  recentBookings: [
-    { id: 'BK-1001', space: 'Downtown Parking Lot', date: 'Mar 21, 2023', time: '9:00 AM - 5:00 PM', status: 'Completed', amount: '$15.00' },
-    { id: 'BK-1002', space: 'City Center Garage', date: 'Mar 15, 2023', time: '10:00 AM - 2:00 PM', status: 'Completed', amount: '$8.00' },
-    { id: 'BK-1003', space: 'Riverside Parking', date: 'Mar 28, 2023', time: '8:00 AM - 6:00 PM', status: 'Upcoming', amount: '$20.00' },
-  ],
-  vehicles: [
-    { id: 1, name: 'Honda Civic', plate: 'ABC-1234', color: 'Blue' },
-    { id: 2, name: 'Toyota Camry', plate: 'XYZ-5678', color: 'Silver' },
-  ]
+// Zod schemas for form validation
+const ProfileSchema = z.object({
+  first_name: z.string().min(1, "First name is required"),
+  last_name: z.string().min(1, "Last name is required"),
+  phone: z.string().optional(),
+  bio: z.string().optional(),
+});
+
+const VehicleSchema = z.object({
+  make: z.string().min(1, "Make is required"),
+  model: z.string().min(1, "Model is required"),
+  year: z.string().optional(),
+  color: z.string().min(1, "Color is required"),
+  license_plate: z.string().min(1, "License plate is required"),
+});
+
+// Types
+type Profile = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+  role: string | null;
+  bio: string | null;
+  created_at: string;
+};
+
+type Vehicle = {
+  id: string;
+  make: string;
+  model: string;
+  year: number | null;
+  color: string | null;
+  license_plate: string | null;
+  created_at: string;
+};
+
+type Booking = {
+  id: string;
+  listing_id: string;
+  start_time: string;
+  end_time: string;
+  status: string;
+  total_price: number;
+  listing: {
+    title: string;
+  };
+};
+
+type Favorite = {
+  id: string;
+  listing_id: string;
+  listing: {
+    title: string;
+    address: string;
+  };
+  created_at: string;
 };
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const [profileData, setProfileData] = useState({
-    name: userData.name,
-    email: userData.email,
-    phone: userData.phone,
+  const queryClient = useQueryClient();
+  const [hostApplicationSubmitted, setHostApplicationSubmitted] = useState(false);
+  const [hostApplicationStatus, setHostApplicationStatus] = useState<string | null>(null);
+  
+  // Fetch user and check if logged in
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getSession();
+      return data.session;
+    },
   });
-  
-  const [newVehicle, setNewVehicle] = useState({
-    name: '',
-    plate: '',
-    color: '',
+
+  // If not logged in, redirect to auth page
+  useEffect(() => {
+    if (session === null) {
+      navigate('/auth');
+    }
+  }, [session, navigate]);
+
+  // Fetch profile data
+  const { data: profile, isLoading: profileLoading } = useQuery({
+    queryKey: ['profile'],
+    queryFn: async () => {
+      if (!session?.user?.id) return null;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+      
+      if (error) throw error;
+      return data as Profile;
+    },
+    enabled: !!session?.user?.id,
   });
-  
-  const handleProfileUpdate = (e: React.FormEvent) => {
-    e.preventDefault();
-    // In a real app, this would send an API request to update the profile
-    toast({
-      title: "Profile Updated",
-      description: "Your profile information has been updated successfully.",
-    });
+
+  // Fetch host application status
+  useQuery({
+    queryKey: ['hostApplication'],
+    queryFn: async () => {
+      if (!session?.user?.id) return null;
+      const { data, error } = await supabase
+        .from('host_applications')
+        .select('status')
+        .eq('user_id', session.user.id)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') throw error;
+      if (data) {
+        setHostApplicationStatus(data.status);
+        setHostApplicationSubmitted(true);
+      }
+      return data;
+    },
+    enabled: !!session?.user?.id,
+  });
+
+  // Fetch user vehicles
+  const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery({
+    queryKey: ['vehicles'],
+    queryFn: async () => {
+      if (!session?.user?.id) return [];
+      const { data, error } = await supabase
+        .from('vehicles')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data as Vehicle[];
+    },
+    enabled: !!session?.user?.id,
+  });
+
+  // Fetch bookings
+  const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
+    queryKey: ['bookings'],
+    queryFn: async () => {
+      if (!session?.user?.id) return [];
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('id, listing_id, start_time, end_time, status, total_price, listing:listings(title)')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data as Booking[];
+    },
+    enabled: !!session?.user?.id,
+  });
+
+  // Fetch favorites
+  const { data: favorites = [], isLoading: favoritesLoading } = useQuery({
+    queryKey: ['favorites'],
+    queryFn: async () => {
+      if (!session?.user?.id) return [];
+      const { data, error } = await supabase
+        .from('favorites')
+        .select('id, listing_id, created_at, listing:listings(title, address)')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data as Favorite[];
+    },
+    enabled: !!session?.user?.id,
+  });
+
+  // Profile form
+  const profileForm = useForm<z.infer<typeof ProfileSchema>>({
+    resolver: zodResolver(ProfileSchema),
+    defaultValues: {
+      first_name: profile?.first_name || '',
+      last_name: profile?.last_name || '',
+      phone: '',
+      bio: profile?.bio || '',
+    },
+  });
+
+  // Update profile values when profile data loads
+  useEffect(() => {
+    if (profile) {
+      profileForm.reset({
+        first_name: profile.first_name || '',
+        last_name: profile.last_name || '',
+        bio: profile.bio || '',
+        phone: '',
+      });
+    }
+  }, [profile, profileForm]);
+
+  // Vehicle form
+  const vehicleForm = useForm<z.infer<typeof VehicleSchema>>({
+    resolver: zodResolver(VehicleSchema),
+    defaultValues: {
+      make: '',
+      model: '',
+      year: '',
+      color: '',
+      license_plate: '',
+    },
+  });
+
+  // Update profile mutation
+  const updateProfile = useMutation({
+    mutationFn: async (values: z.infer<typeof ProfileSchema>) => {
+      if (!session?.user?.id) throw new Error('Not authenticated');
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          first_name: values.first_name,
+          last_name: values.last_name,
+          bio: values.bio,
+        })
+        .eq('id', session.user.id);
+      
+      if (error) throw error;
+      return values;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Profile Updated",
+        description: "Your profile information has been updated successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to update profile: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Add vehicle mutation
+  const addVehicle = useMutation({
+    mutationFn: async (values: z.infer<typeof VehicleSchema>) => {
+      if (!session?.user?.id) throw new Error('Not authenticated');
+      
+      const { error } = await supabase
+        .from('vehicles')
+        .insert({
+          user_id: session.user.id,
+          make: values.make,
+          model: values.model,
+          year: values.year ? parseInt(values.year) : null,
+          color: values.color,
+          license_plate: values.license_plate,
+        });
+      
+      if (error) throw error;
+      return values;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Vehicle Added",
+        description: "Your vehicle has been added successfully.",
+      });
+      vehicleForm.reset();
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to add vehicle: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Host application mutation
+  const applyForHost = useMutation({
+    mutationFn: async () => {
+      if (!session?.user?.id) throw new Error('Not authenticated');
+      
+      const { error } = await supabase
+        .from('host_applications')
+        .insert({
+          user_id: session.user.id,
+        });
+      
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: () => {
+      setHostApplicationSubmitted(true);
+      setHostApplicationStatus('pending');
+      toast({
+        title: "Application Submitted",
+        description: "Your host application has been submitted for review.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['hostApplication'] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to submit host application: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Handle profile form submission
+  const onProfileSubmit = (values: z.infer<typeof ProfileSchema>) => {
+    updateProfile.mutate(values);
   };
-  
-  const handleAddVehicle = (e: React.FormEvent) => {
-    e.preventDefault();
-    // In a real app, this would send an API request to add a new vehicle
-    toast({
-      title: "Vehicle Added",
-      description: `Your vehicle ${newVehicle.name} has been added successfully.`,
-    });
-    setNewVehicle({ name: '', plate: '', color: '' });
+
+  // Handle vehicle form submission
+  const onVehicleSubmit = (values: z.infer<typeof VehicleSchema>) => {
+    addVehicle.mutate(values);
   };
-  
-  const handleLogout = () => {
-    // In a real app, this would handle logout logic
-    navigate('/');
-    
-    toast({
-      title: "Logged Out",
-      description: "You have been logged out successfully.",
-    });
+
+  // Handle host application
+  const handleHostApplication = () => {
+    applyForHost.mutate();
   };
-  
+
+  // Handle logout
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast({
+        title: "Error",
+        description: `Failed to log out: ${error.message}`,
+        variant: "destructive",
+      });
+    } else {
+      navigate('/');
+      toast({
+        title: "Logged Out",
+        description: "You have been logged out successfully.",
+      });
+    }
+  };
+
+  if (!session) {
+    return <div className="min-h-screen flex items-center justify-center">Redirecting to login...</div>;
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Navbar />
@@ -91,12 +375,36 @@ const Dashboard: React.FC = () => {
               <div className="bg-white shadow-sm rounded-xl border border-gray-100 p-6">
                 <div className="flex flex-col items-center text-center mb-6">
                   <Avatar className="h-24 w-24 mb-4">
-                    <AvatarImage src={userData.avatar} alt={userData.name} />
-                    <AvatarFallback>{userData.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
+                    <AvatarImage src={profile?.avatar_url || ''} alt={profile?.first_name || ''} />
+                    <AvatarFallback>
+                      {profile?.first_name?.[0] || ''}{profile?.last_name?.[0] || ''}
+                    </AvatarFallback>
                   </Avatar>
-                  <h2 className="text-xl font-bold">{userData.name}</h2>
-                  <p className="text-gray-500 text-sm mt-1">{userData.email}</p>
-                  <p className="text-gray-400 text-xs mt-1">Member since {userData.joinDate}</p>
+                  <h2 className="text-xl font-bold">
+                    {profile?.first_name} {profile?.last_name}
+                  </h2>
+                  <p className="text-gray-500 text-sm mt-1">{session.user.email}</p>
+                  <p className="text-gray-400 text-xs mt-1">
+                    Member since {new Date(profile?.created_at || '').toLocaleDateString()}
+                  </p>
+                  
+                  {/* Host status / application button */}
+                  {profile?.role === 'host' ? (
+                    <div className="mt-3 px-3 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                      Host
+                    </div>
+                  ) : hostApplicationSubmitted ? (
+                    <div className="mt-3 px-3 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                      Host application {hostApplicationStatus}
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={handleHostApplication}
+                      className="mt-3 px-3 py-1 bg-parkongo-100 text-parkongo-700 text-xs rounded-full hover:bg-parkongo-200 transition-colors"
+                    >
+                      Become a Host
+                    </button>
+                  )}
                 </div>
                 
                 <nav className="space-y-2">
@@ -153,7 +461,7 @@ const Dashboard: React.FC = () => {
                   {/* Welcome Card */}
                   <Card>
                     <CardHeader className="pb-3">
-                      <CardTitle>Welcome back, {userData.name.split(' ')[0]}!</CardTitle>
+                      <CardTitle>Welcome back, {profile?.first_name || 'User'}!</CardTitle>
                       <CardDescription>
                         Here's a summary of your recent activity and upcoming bookings.
                       </CardDescription>
@@ -166,40 +474,53 @@ const Dashboard: React.FC = () => {
                       <CardTitle className="text-lg">Recent Bookings</CardTitle>
                     </CardHeader>
                     <CardContent className="p-0">
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>ID</TableHead>
-                              <TableHead>Space</TableHead>
-                              <TableHead>Date</TableHead>
-                              <TableHead>Time</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Amount</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {userData.recentBookings.map((booking) => (
-                              <TableRow key={booking.id}>
-                                <TableCell className="font-medium">{booking.id}</TableCell>
-                                <TableCell>{booking.space}</TableCell>
-                                <TableCell>{booking.date}</TableCell>
-                                <TableCell>{booking.time}</TableCell>
-                                <TableCell>
-                                  <span className={`px-2 py-1 rounded-full text-xs ${
-                                    booking.status === 'Completed' 
-                                      ? 'bg-green-100 text-green-800' 
-                                      : 'bg-blue-100 text-blue-800'
-                                  }`}>
-                                    {booking.status}
-                                  </span>
-                                </TableCell>
-                                <TableCell>{booking.amount}</TableCell>
+                      {bookingsLoading ? (
+                        <div className="p-4 text-center">Loading bookings...</div>
+                      ) : bookings.length === 0 ? (
+                        <div className="p-4 text-center text-gray-500">No bookings found.</div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>ID</TableHead>
+                                <TableHead>Space</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead>Time</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Amount</TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
+                            </TableHeader>
+                            <TableBody>
+                              {bookings.slice(0, 3).map((booking) => (
+                                <TableRow key={booking.id}>
+                                  <TableCell className="font-medium">{booking.id.split('-')[0]}</TableCell>
+                                  <TableCell>{booking.listing?.title || 'Unknown'}</TableCell>
+                                  <TableCell>{new Date(booking.start_time).toLocaleDateString()}</TableCell>
+                                  <TableCell>
+                                    {new Date(booking.start_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
+                                    {new Date(booking.end_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className={`px-2 py-1 rounded-full text-xs ${
+                                      booking.status === 'completed' 
+                                        ? 'bg-green-100 text-green-800' 
+                                        : booking.status === 'pending'
+                                          ? 'bg-yellow-100 text-yellow-800'
+                                          : booking.status === 'cancelled'
+                                            ? 'bg-red-100 text-red-800'
+                                            : 'bg-blue-100 text-blue-800'
+                                    }`}>
+                                      {booking.status.charAt(0).toUpperCase() + booking.status.slice(1)}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell>₹{booking.total_price}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
                     </CardContent>
                     <CardFooter className="pt-3">
                       <Button variant="outline" className="w-full">View All Bookings</Button>
@@ -213,7 +534,7 @@ const Dashboard: React.FC = () => {
                         <CardTitle className="text-sm text-gray-500">Total Bookings</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <p className="text-3xl font-bold">24</p>
+                        <p className="text-3xl font-bold">{bookings.length}</p>
                       </CardContent>
                     </Card>
                     <Card>
@@ -221,7 +542,7 @@ const Dashboard: React.FC = () => {
                         <CardTitle className="text-sm text-gray-500">Favorite Spaces</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <p className="text-3xl font-bold">{userData.favoriteSpaces.length}</p>
+                        <p className="text-3xl font-bold">{favorites.length}</p>
                       </CardContent>
                     </Card>
                     <Card>
@@ -229,7 +550,7 @@ const Dashboard: React.FC = () => {
                         <CardTitle className="text-sm text-gray-500">Registered Vehicles</CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <p className="text-3xl font-bold">{userData.vehicles.length}</p>
+                        <p className="text-3xl font-bold">{vehicles.length}</p>
                       </CardContent>
                     </Card>
                   </div>
@@ -245,67 +566,77 @@ const Dashboard: React.FC = () => {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <form onSubmit={handleProfileUpdate} className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="name">Full Name</Label>
-                          <Input 
-                            id="name" 
-                            value={profileData.name} 
-                            onChange={(e) => setProfileData({...profileData, name: e.target.value})}
+                      <Form {...profileForm}>
+                        <form onSubmit={profileForm.handleSubmit(onProfileSubmit)} className="space-y-4">
+                          <FormField
+                            control={profileForm.control}
+                            name="first_name"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>First Name</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Enter your first name" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="email">Email Address</Label>
-                          <Input 
-                            id="email" 
-                            type="email" 
-                            value={profileData.email} 
-                            onChange={(e) => setProfileData({...profileData, email: e.target.value})}
+                          
+                          <FormField
+                            control={profileForm.control}
+                            name="last_name"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Last Name</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Enter your last name" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="phone">Phone Number</Label>
-                          <Input 
-                            id="phone" 
-                            type="tel" 
-                            value={profileData.phone} 
-                            onChange={(e) => setProfileData({...profileData, phone: e.target.value})}
+                          
+                          <FormField
+                            control={profileForm.control}
+                            name="phone"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Phone Number</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Enter your phone number" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="bio">About Me</Label>
-                          <Textarea 
-                            id="bio" 
-                            placeholder="Tell us a little about yourself..."
-                            className="min-h-24"
+                          
+                          <FormField
+                            control={profileForm.control}
+                            name="bio"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>About Me</FormLabel>
+                                <FormControl>
+                                  <Textarea 
+                                    placeholder="Tell us a little about yourself..."
+                                    className="min-h-24"
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
-                        </div>
-                        <Button type="submit" customStyle="primary">Save Changes</Button>
-                      </form>
-                    </CardContent>
-                  </Card>
-                  
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Account Security</CardTitle>
-                      <CardDescription>
-                        Manage your password and security settings.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="current-password">Current Password</Label>
-                        <Input id="current-password" type="password" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="new-password">New Password</Label>
-                        <Input id="new-password" type="password" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="confirm-password">Confirm New Password</Label>
-                        <Input id="confirm-password" type="password" />
-                      </div>
-                      <Button variant="outline">Change Password</Button>
+                          
+                          <Button 
+                            type="submit" 
+                            customStyle="primary"
+                            isLoading={updateProfile.isPending}
+                          >
+                            Save Changes
+                          </Button>
+                        </form>
+                      </Form>
                     </CardContent>
                   </Card>
                 </TabsContent>
@@ -320,22 +651,29 @@ const Dashboard: React.FC = () => {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-4">
-                        {userData.vehicles.map((vehicle) => (
-                          <div key={vehicle.id} className="flex items-center justify-between p-4 border rounded-lg">
-                            <div className="flex items-center gap-4">
-                              <Car className="h-10 w-10 text-gray-400" />
-                              <div>
-                                <h4 className="font-medium">{vehicle.name}</h4>
-                                <p className="text-sm text-gray-500">
-                                  {vehicle.plate} • {vehicle.color}
-                                </p>
+                      {vehiclesLoading ? (
+                        <div className="text-center py-4">Loading vehicles...</div>
+                      ) : vehicles.length === 0 ? (
+                        <div className="text-center py-4 text-gray-500">No vehicles registered yet.</div>
+                      ) : (
+                        <div className="space-y-4">
+                          {vehicles.map((vehicle) => (
+                            <div key={vehicle.id} className="flex items-center justify-between p-4 border rounded-lg">
+                              <div className="flex items-center gap-4">
+                                <Car className="h-10 w-10 text-gray-400" />
+                                <div>
+                                  <h4 className="font-medium">{vehicle.make} {vehicle.model}</h4>
+                                  <p className="text-sm text-gray-500">
+                                    {vehicle.license_plate} • {vehicle.color}
+                                    {vehicle.year ? ` • ${vehicle.year}` : ''}
+                                  </p>
+                                </div>
                               </div>
+                              <Button variant="outline" size="sm">Edit</Button>
                             </div>
-                            <Button variant="outline" size="sm">Edit</Button>
-                          </div>
-                        ))}
-                      </div>
+                          ))}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                   
@@ -347,39 +685,91 @@ const Dashboard: React.FC = () => {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <form onSubmit={handleAddVehicle} className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="vehicle-name">Vehicle Make & Model</Label>
-                          <Input 
-                            id="vehicle-name" 
-                            placeholder="e.g. Honda Civic" 
-                            value={newVehicle.name}
-                            onChange={(e) => setNewVehicle({...newVehicle, name: e.target.value})}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="vehicle-plate">License Plate</Label>
-                          <Input 
-                            id="vehicle-plate" 
-                            placeholder="e.g. ABC-1234" 
-                            value={newVehicle.plate}
-                            onChange={(e) => setNewVehicle({...newVehicle, plate: e.target.value})}
-                            required
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="vehicle-color">Vehicle Color</Label>
-                          <Input 
-                            id="vehicle-color" 
-                            placeholder="e.g. Blue" 
-                            value={newVehicle.color}
-                            onChange={(e) => setNewVehicle({...newVehicle, color: e.target.value})}
-                            required
-                          />
-                        </div>
-                        <Button type="submit" customStyle="primary">Add Vehicle</Button>
-                      </form>
+                      <Form {...vehicleForm}>
+                        <form onSubmit={vehicleForm.handleSubmit(onVehicleSubmit)} className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <FormField
+                              control={vehicleForm.control}
+                              name="make"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Vehicle Make</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="e.g. Honda, Toyota" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <FormField
+                              control={vehicleForm.control}
+                              name="model"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Vehicle Model</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="e.g. Civic, Camry" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <FormField
+                              control={vehicleForm.control}
+                              name="year"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Year (Optional)</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="e.g. 2023" type="number" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <FormField
+                              control={vehicleForm.control}
+                              name="color"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>Vehicle Color</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="e.g. Blue, Silver" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <FormField
+                              control={vehicleForm.control}
+                              name="license_plate"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>License Plate</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="e.g. ABC-1234" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                          
+                          <Button 
+                            type="submit" 
+                            customStyle="primary"
+                            isLoading={addVehicle.isPending}
+                          >
+                            Add Vehicle
+                          </Button>
+                        </form>
+                      </Form>
                     </CardContent>
                   </Card>
                 </TabsContent>

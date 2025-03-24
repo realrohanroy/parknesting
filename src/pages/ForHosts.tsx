@@ -1,5 +1,6 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import Button from '@/components/Button';
@@ -10,78 +11,260 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { supabase } from '@/integrations/supabase/client';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from 'react-hook-form';
+import * as z from "zod";
+import { Form, FormField, FormItem, FormLabel, FormControl, FormMessage } from '@/components/ui/form';
+
+// Define the form schema
+const ListingSchema = z.object({
+  title: z.string().min(3, "Title must be at least 3 characters"),
+  address: z.string().min(5, "Address is required"),
+  city: z.string().min(2, "City is required"),
+  state: z.string().min(2, "State is required"),
+  zipcode: z.string().min(5, "Zipcode is required"),
+  description: z.string().optional(),
+  space_type: z.string().min(1, "Space type is required"),
+  hourly_rate: z.coerce.number().min(1, "Hourly rate is required"),
+  features: z.object({
+    security_camera: z.boolean().default(false),
+    covered: z.boolean().default(false),
+    electric_charging: z.boolean().default(false),
+    overnight: z.boolean().default(false),
+    accessible: z.boolean().default(false),
+  }).default({}),
+});
 
 const ForHosts: React.FC = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [isHost, setIsHost] = useState(false);
+  const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
+  const [coverImage, setCoverImage] = useState<File | null>(null);
   
-  // Form state
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    address: '',
-    city: '',
-    zipCode: '',
-    spaceType: '',
-    size: '',
-    price: '',
-    description: '',
-    availableAllDay: true,
-    securityCamera: false,
-    coverImage: null as File | null,
+  // Fetch user session
+  const { data: session } = useQuery({
+    queryKey: ['session'],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getSession();
+      return data.session;
+    },
   });
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSelectChange = (name: string, value: string) => {
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSwitchChange = (name: string, checked: boolean) => {
-    setFormData(prev => ({ ...prev, [name]: checked }));
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFormData(prev => ({ ...prev, coverImage: e.target.files![0] }));
-    }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
+  
+  // Fetch profile to check if user is a host
+  useQuery({
+    queryKey: ['profileRole'],
+    queryFn: async () => {
+      if (!session?.user?.id) return null;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .single();
+      
+      if (error) throw error;
+      setIsHost(data.role === 'host');
+      return data;
+    },
+    enabled: !!session?.user?.id,
+  });
+  
+  // Check if user has a pending host application
+  useQuery({
+    queryKey: ['hostApplication'],
+    queryFn: async () => {
+      if (!session?.user?.id) return null;
+      const { data, error } = await supabase
+        .from('host_applications')
+        .select('status')
+        .eq('user_id', session.user.id)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') throw error;
+      if (data) {
+        setApplicationStatus(data.status);
+      }
+      return data;
+    },
+    enabled: !!session?.user?.id && !isHost,
+  });
+  
+  // Initialize form
+  const form = useForm<z.infer<typeof ListingSchema>>({
+    resolver: zodResolver(ListingSchema),
+    defaultValues: {
+      title: '',
+      address: '',
+      city: '',
+      state: '',
+      zipcode: '',
+      description: '',
+      space_type: '',
+      hourly_rate: 0,
+      features: {
+        security_camera: false,
+        covered: false,
+        electric_charging: false,
+        overnight: false,
+        accessible: false,
+      },
+    },
+  });
+  
+  // Apply to become a host mutation
+  const applyForHost = useMutation({
+    mutationFn: async () => {
+      if (!session?.user?.id) throw new Error('Not authenticated');
+      
+      const { error } = await supabase
+        .from('host_applications')
+        .insert({
+          user_id: session.user.id,
+        });
+      
+      if (error) throw error;
+      return true;
+    },
+    onSuccess: () => {
+      setApplicationStatus('pending');
+      toast({
+        title: "Application Submitted",
+        description: "Your host application has been submitted for review.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to submit application: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Create listing mutation
+  const createListing = useMutation({
+    mutationFn: async (values: z.infer<typeof ListingSchema>) => {
+      if (!session?.user?.id) throw new Error('Not authenticated');
+      
+      // First insert the listing
+      const { data: listing, error } = await supabase
+        .from('listings')
+        .insert({
+          profile_id: session.user.id,
+          title: values.title,
+          address: values.address,
+          city: values.city,
+          state: values.state,
+          zipcode: values.zipcode,
+          description: values.description,
+          space_type: values.space_type,
+          hourly_rate: values.hourly_rate,
+          // This will trigger the function to set location from lat/long
+          latitude: 0, // These would be set from geocoding in a real app
+          longitude: 0,
+        })
+        .select('id')
+        .single();
+      
+      if (error) throw error;
+      
+      // Then add features
+      const featurePromises = Object.entries(values.features).map(([feature, value]) => {
+        if (value) {
+          return supabase
+            .from('listing_features')
+            .insert({
+              listing_id: listing.id,
+              feature,
+              value: JSON.stringify(value),
+            });
+        }
+        return Promise.resolve();
+      });
+      
+      await Promise.all(featurePromises);
+      
+      // Handle image upload if present
+      if (coverImage) {
+        const fileExt = coverImage.name.split('.').pop();
+        const filePath = `listings/${listing.id}/${Math.random().toString(36).substring(2)}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('listing-images')
+          .upload(filePath, coverImage);
+          
+        if (uploadError) throw uploadError;
+        
+        // Get the public URL
+        const { data: publicURL } = supabase.storage
+          .from('listing-images')
+          .getPublicUrl(filePath);
+          
+        // Update the listing with the image URL
+        const { error: updateError } = await supabase
+          .from('listings')
+          .update({
+            images: [publicURL.publicUrl],
+          })
+          .eq('id', listing.id);
+          
+        if (updateError) throw updateError;
+      }
+      
+      return listing;
+    },
+    onSuccess: () => {
       toast({
         title: "Space Listed Successfully!",
         description: "Your parking space has been listed on Parkongo. You'll be notified when someone books it.",
       });
+      form.reset();
+      setCoverImage(null);
       setShowForm(false);
-      
-      // Reset form data
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        address: '',
-        city: '',
-        zipCode: '',
-        spaceType: '',
-        size: '',
-        price: '',
-        description: '',
-        availableAllDay: true,
-        securityCamera: false,
-        coverImage: null,
+    },
+    onError: (error) => {
+      toast({
+        title: "Error",
+        description: `Failed to create listing: ${error.message}`,
+        variant: "destructive",
       });
-    }, 1500);
+    },
+  });
+  
+  const handleApplyForHost = () => {
+    if (!session) {
+      toast({
+        title: "Please Log In",
+        description: "You need to be logged in to become a host.",
+      });
+      navigate('/auth');
+      return;
+    }
+    
+    applyForHost.mutate();
+  };
+  
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setCoverImage(e.target.files[0]);
+    }
+  };
+  
+  const onSubmit = (values: z.infer<typeof ListingSchema>) => {
+    if (!isHost) {
+      toast({
+        title: "Not a Host",
+        description: "You need to be approved as a host before listing a space.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    createListing.mutate(values);
   };
   
   const benefits = [
@@ -119,15 +302,42 @@ const ForHosts: React.FC = () => {
                   Join thousands of hosts who are earning passive income by renting out their unused parking spaces on Parkongo.
                 </p>
                 <div className="pt-4 flex flex-col sm:flex-row gap-4 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-                  <Button
-                    variant="default"
-                    size="lg"
-                    customStyle="primary"
-                    leftIcon={<Warehouse className="h-5 w-5" />}
-                    onClick={() => setShowForm(!showForm)}
-                  >
-                    {showForm ? "Hide Form" : "List Your Space Now"}
-                  </Button>
+                  {!session ? (
+                    <Button
+                      variant="default"
+                      size="lg"
+                      customStyle="primary"
+                      leftIcon={<Warehouse className="h-5 w-5" />}
+                      onClick={() => navigate('/auth')}
+                    >
+                      Sign in to get started
+                    </Button>
+                  ) : isHost ? (
+                    <Button
+                      variant="default"
+                      size="lg"
+                      customStyle="primary"
+                      leftIcon={<Warehouse className="h-5 w-5" />}
+                      onClick={() => setShowForm(!showForm)}
+                    >
+                      {showForm ? "Hide Form" : "List Your Space Now"}
+                    </Button>
+                  ) : applicationStatus ? (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg">
+                      <span>Your host application is {applicationStatus}</span>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="default"
+                      size="lg"
+                      customStyle="primary"
+                      leftIcon={<Warehouse className="h-5 w-5" />}
+                      onClick={handleApplyForHost}
+                      isLoading={applyForHost.isPending}
+                    >
+                      Apply to Become a Host
+                    </Button>
+                  )}
                 </div>
               </div>
               
@@ -157,194 +367,252 @@ const ForHosts: React.FC = () => {
           </div>
         </section>
         
-        {/* Listing Form Section - Only shown when showForm is true */}
-        {showForm && (
+        {/* Listing Form Section - Only shown when showForm is true and user is a host */}
+        {isHost && showForm && (
           <section className="py-16 bg-white">
             <div className="container mx-auto px-4 md:px-6">
               <div className="max-w-3xl mx-auto">
                 <div className="bg-white p-8 rounded-xl shadow-lg border border-gray-100">
                   <h2 className="text-2xl font-bold mb-6 text-center">List Your Parking Space</h2>
                   
-                  <form onSubmit={handleSubmit} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {/* Personal Information */}
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-semibold border-b pb-2">Personal Information</h3>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="name">Full Name</Label>
-                          <Input 
-                            id="name" 
-                            name="name" 
-                            value={formData.name} 
-                            onChange={handleInputChange} 
-                            placeholder="John Doe" 
-                            required 
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="email">Email Address</Label>
-                          <Input 
-                            id="email" 
-                            name="email" 
-                            type="email" 
-                            value={formData.email} 
-                            onChange={handleInputChange} 
-                            placeholder="john@example.com" 
-                            required 
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="phone">Phone Number</Label>
-                          <Input 
-                            id="phone" 
-                            name="phone" 
-                            value={formData.phone} 
-                            onChange={handleInputChange} 
-                            placeholder="+91 9876543210" 
-                            required 
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Space Information */}
-                      <div className="space-y-4">
-                        <h3 className="text-lg font-semibold border-b pb-2">Space Information</h3>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="address">Address</Label>
-                          <Input 
-                            id="address" 
-                            name="address" 
-                            value={formData.address} 
-                            onChange={handleInputChange} 
-                            placeholder="123 Main St" 
-                            required 
-                          />
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="city">City</Label>
-                            <Input 
-                              id="city" 
-                              name="city" 
-                              value={formData.city} 
-                              onChange={handleInputChange} 
-                              placeholder="Mumbai" 
-                              required 
-                            />
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <Label htmlFor="zipCode">ZIP Code</Label>
-                            <Input 
-                              id="zipCode" 
-                              name="zipCode" 
-                              value={formData.zipCode} 
-                              onChange={handleInputChange} 
-                              placeholder="400001" 
-                              required 
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="spaceType">Space Type</Label>
-                          <Select 
-                            value={formData.spaceType} 
-                            onValueChange={(value) => handleSelectChange('spaceType', value)}
-                          >
-                            <SelectTrigger id="spaceType">
-                              <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="garage">Garage</SelectItem>
-                              <SelectItem value="driveway">Driveway</SelectItem>
-                              <SelectItem value="carport">Carport</SelectItem>
-                              <SelectItem value="outdoor">Outdoor Space</SelectItem>
-                              <SelectItem value="underground">Underground</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Details Section */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold border-b pb-2">Space Details</h3>
-                      
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-2">
-                          <Label htmlFor="size">Size</Label>
-                          <Select 
-                            value={formData.size} 
-                            onValueChange={(value) => handleSelectChange('size', value)}
-                          >
-                            <SelectTrigger id="size">
-                              <SelectValue placeholder="Select size" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="compact">Compact Car</SelectItem>
-                              <SelectItem value="standard">Standard Car</SelectItem>
-                              <SelectItem value="large">Large Car/SUV</SelectItem>
-                              <SelectItem value="oversized">Oversized/Van</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <Label htmlFor="price">Monthly Price (₹)</Label>
-                          <Input 
-                            id="price" 
-                            name="price" 
-                            type="number" 
-                            value={formData.price} 
-                            onChange={handleInputChange} 
-                            placeholder="3000" 
-                            required 
+                        {/* Space Information */}
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold border-b pb-2">Space Information</h3>
+                          
+                          <FormField
+                            control={form.control}
+                            name="title"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Title</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="E.g. Downtown Covered Parking" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="description"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Description</FormLabel>
+                                <FormControl>
+                                  <Textarea 
+                                    placeholder="Describe your parking space, access instructions, and any special features." 
+                                    rows={4}
+                                    {...field} 
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="space_type"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Space Type</FormLabel>
+                                <Select 
+                                  onValueChange={field.onChange} 
+                                  defaultValue={field.value}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger>
+                                      <SelectValue placeholder="Select type" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="garage">Garage</SelectItem>
+                                    <SelectItem value="driveway">Driveway</SelectItem>
+                                    <SelectItem value="carport">Carport</SelectItem>
+                                    <SelectItem value="outdoor">Outdoor Space</SelectItem>
+                                    <SelectItem value="underground">Underground</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="hourly_rate"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Hourly Rate (₹)</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    type="number" 
+                                    placeholder="100" 
+                                    {...field}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
                           />
                         </div>
                         
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="availableAllDay">Available 24/7</Label>
-                            <Switch 
-                              id="availableAllDay" 
-                              checked={formData.availableAllDay}
-                              onCheckedChange={(checked) => handleSwitchChange('availableAllDay', checked)}
+                        {/* Address Information */}
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-semibold border-b pb-2">Address Information</h3>
+                          
+                          <FormField
+                            control={form.control}
+                            name="address"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Street Address</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="123 Main St" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="city"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>City</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Mumbai" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <FormField
+                              control={form.control}
+                              name="state"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>State</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="Maharashtra" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                            
+                            <FormField
+                              control={form.control}
+                              name="zipcode"
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>ZIP Code</FormLabel>
+                                  <FormControl>
+                                    <Input placeholder="400001" {...field} />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
                             />
                           </div>
-                          <p className="text-sm text-gray-500">Toggle off if your space has limited hours</p>
                         </div>
+                      </div>
+                      
+                      {/* Features */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-semibold border-b pb-2">Features</h3>
                         
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <Label htmlFor="securityCamera">Security Camera</Label>
-                            <Switch 
-                              id="securityCamera" 
-                              checked={formData.securityCamera}
-                              onCheckedChange={(checked) => handleSwitchChange('securityCamera', checked)}
-                            />
-                          </div>
-                          <p className="text-sm text-gray-500">Does your space have security cameras?</p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <FormField
+                            control={form.control}
+                            name="features.security_camera"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center justify-between space-y-0">
+                                <FormLabel>Security Camera</FormLabel>
+                                <FormControl>
+                                  <Switch 
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="features.covered"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center justify-between space-y-0">
+                                <FormLabel>Covered Parking</FormLabel>
+                                <FormControl>
+                                  <Switch 
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="features.electric_charging"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center justify-between space-y-0">
+                                <FormLabel>EV Charging</FormLabel>
+                                <FormControl>
+                                  <Switch 
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="features.overnight"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center justify-between space-y-0">
+                                <FormLabel>Overnight Parking</FormLabel>
+                                <FormControl>
+                                  <Switch 
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          
+                          <FormField
+                            control={form.control}
+                            name="features.accessible"
+                            render={({ field }) => (
+                              <FormItem className="flex items-center justify-between space-y-0">
+                                <FormLabel>Accessible Parking</FormLabel>
+                                <FormControl>
+                                  <Switch 
+                                    checked={field.value}
+                                    onCheckedChange={field.onChange}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
                         </div>
                       </div>
                       
-                      <div className="space-y-2">
-                        <Label htmlFor="description">Description</Label>
-                        <Textarea 
-                          id="description" 
-                          name="description" 
-                          value={formData.description} 
-                          onChange={handleInputChange} 
-                          placeholder="Describe your parking space, access instructions, and any special features." 
-                          rows={4} 
-                        />
-                      </div>
-                      
+                      {/* Photos */}
                       <div className="space-y-2">
                         <Label htmlFor="coverImage">Upload Photos</Label>
                         <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center cursor-pointer hover:bg-gray-50 transition">
@@ -358,7 +626,7 @@ const ForHosts: React.FC = () => {
                           <label htmlFor="coverImage" className="cursor-pointer w-full h-full flex flex-col items-center justify-center">
                             <CameraIcon className="h-8 w-8 text-gray-400 mb-2" />
                             <p className="text-sm font-medium text-gray-600">
-                              {formData.coverImage ? formData.coverImage.name : "Click to upload photos of your space"}
+                              {coverImage ? coverImage.name : "Click to upload photos of your space"}
                             </p>
                             <p className="text-xs text-gray-400 mt-1">
                               Clear photos increase booking chances by 80%
@@ -366,24 +634,24 @@ const ForHosts: React.FC = () => {
                           </label>
                         </div>
                       </div>
-                    </div>
-                    
-                    <div className="pt-4">
-                      <Button
-                        variant="default"
-                        customStyle="primary"
-                        size="lg"
-                        isLoading={isSubmitting}
-                        type="submit"
-                        fullWidth
-                      >
-                        Submit Listing
-                      </Button>
-                      <p className="text-xs text-center text-gray-500 mt-2">
-                        By submitting, you agree to our Terms of Service and Privacy Policy
-                      </p>
-                    </div>
-                  </form>
+                      
+                      <div className="pt-4">
+                        <Button
+                          variant="default"
+                          customStyle="primary"
+                          size="lg"
+                          isLoading={createListing.isPending}
+                          type="submit"
+                          fullWidth
+                        >
+                          Submit Listing
+                        </Button>
+                        <p className="text-xs text-center text-gray-500 mt-2">
+                          By submitting, you agree to our Terms of Service and Privacy Policy
+                        </p>
+                      </div>
+                    </form>
+                  </Form>
                 </div>
               </div>
             </div>
@@ -432,13 +700,13 @@ const ForHosts: React.FC = () => {
                 {[
                   {
                     step: "1",
-                    title: "List Your Space",
-                    description: "Add details, photos, and set your price and availability."
+                    title: "Apply to Host",
+                    description: "Submit your application and get approved to become a host on our platform."
                   },
                   {
                     step: "2",
-                    title: "Get Bookings",
-                    description: "Drivers book your space through our platform."
+                    title: "List Your Space",
+                    description: "Add details, photos, and set your price and availability."
                   },
                   {
                     step: "3",
@@ -468,14 +736,39 @@ const ForHosts: React.FC = () => {
                 Join thousands of hosts who are already earning passive income with their parking spaces.
               </p>
               <div className="inline-flex flex-wrap justify-center gap-4">
-                <Button
-                  variant="default"
-                  size="lg"
-                  className="bg-white text-parkongo-600 hover:bg-gray-100"
-                  onClick={() => setShowForm(true)}
-                >
-                  List Your Space Now
-                </Button>
+                {!session ? (
+                  <Button
+                    variant="default"
+                    size="lg"
+                    className="bg-white text-parkongo-600 hover:bg-gray-100"
+                    onClick={() => navigate('/auth')}
+                  >
+                    Sign In to Get Started
+                  </Button>
+                ) : isHost ? (
+                  <Button
+                    variant="default"
+                    size="lg"
+                    className="bg-white text-parkongo-600 hover:bg-gray-100"
+                    onClick={() => setShowForm(true)}
+                  >
+                    List Your Space Now
+                  </Button>
+                ) : applicationStatus ? (
+                  <div className="px-6 py-3 bg-white/10 rounded-lg text-white">
+                    Your application is {applicationStatus}
+                  </div>
+                ) : (
+                  <Button
+                    variant="default"
+                    size="lg"
+                    className="bg-white text-parkongo-600 hover:bg-gray-100"
+                    onClick={handleApplyForHost}
+                    isLoading={applyForHost.isPending}
+                  >
+                    Apply to Become a Host
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   size="lg"

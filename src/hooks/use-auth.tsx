@@ -71,6 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUp = async (email: string, password: string, metadata?: Record<string, any>) => {
     setIsLoading(true);
+    // Use sign up with email password but set the default redirect to be handled differently
     const { data, error } = await supabase.auth.signUp({
       email,
       password,

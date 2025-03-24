@@ -1,13 +1,23 @@
-
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Menu, X, ChevronDown, PlusCircle } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Menu, X, ChevronDown, PlusCircle, User } from 'lucide-react';
 import Button from './Button';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/use-auth';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 const Navbar: React.FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const { user, isAuthenticated, signOut } = useAuth();
+  const navigate = useNavigate();
 
   // Handle scroll event to change navbar appearance
   useEffect(() => {
@@ -25,6 +35,36 @@ const Navbar: React.FC = () => {
 
   const toggleMenu = () => setIsMenuOpen(!isMenuOpen);
   const closeMenu = () => setIsMenuOpen(false);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/');
+    closeMenu();
+  };
+
+  // Get user's initials for avatar
+  const getUserInitials = () => {
+    if (!user) return '?';
+    
+    // Check if user has profile data
+    if (user.user_metadata && user.user_metadata.first_name) {
+      return `${(user.user_metadata.first_name || '').charAt(0)}${(user.user_metadata.last_name || '').charAt(0)}`;
+    }
+    
+    // Fallback to email
+    return (user.email || '').charAt(0).toUpperCase();
+  };
+
+  // Get user's name
+  const getUserName = () => {
+    if (!user) return '';
+    
+    if (user.user_metadata && user.user_metadata.first_name) {
+      return `${user.user_metadata.first_name} ${user.user_metadata.last_name || ''}`;
+    }
+    
+    return user.email?.split('@')[0] || '';
+  };
 
   return (
     <header
@@ -80,7 +120,7 @@ const Navbar: React.FC = () => {
           </Link>
         </nav>
 
-        {/* Auth Buttons */}
+        {/* Auth Buttons or User Menu */}
         <div className="hidden md:flex items-center space-x-4">
           <Button 
             variant="outline"
@@ -90,16 +130,54 @@ const Navbar: React.FC = () => {
           >
             List Your Space
           </Button>
-          <Button variant="ghost" href="/auth?type=signin">
-            Sign In
-          </Button>
-          <Button 
-            variant="default"
-            customStyle="primary" 
-            href="/auth?type=signup"
-          >
-            Sign Up
-          </Button>
+          
+          {isAuthenticated ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex items-center space-x-2 focus:outline-none">
+                  <Avatar className="h-9 w-9 border-2 border-parkongo-100">
+                    <AvatarImage src={user?.user_metadata?.avatar_url || ''} />
+                    <AvatarFallback className="bg-parkongo-100 text-parkongo-700">
+                      {getUserInitials()}
+                    </AvatarFallback>
+                  </Avatar>
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <div className="px-4 py-3 border-b">
+                  <p className="text-sm font-medium">{getUserName()}</p>
+                  <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                </div>
+                <DropdownMenuItem asChild>
+                  <Link to="/dashboard" className="cursor-pointer">
+                    Dashboard
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/dashboard?tab=profile" className="cursor-pointer">
+                    Profile Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer text-red-600">
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <>
+              <Button variant="ghost" href="/auth?type=signin">
+                Sign In
+              </Button>
+              <Button 
+                variant="default"
+                customStyle="primary" 
+                href="/auth?type=signup"
+              >
+                Sign Up
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Mobile Menu Button */}
@@ -172,23 +250,58 @@ const Navbar: React.FC = () => {
           </Link>
         </nav>
         <div className="mt-auto space-y-4">
-          <Button 
-            variant="outline" 
-            fullWidth 
-            href="/auth?type=signin"
-            onClick={closeMenu}
-          >
-            Sign In
-          </Button>
-          <Button 
-            variant="default"
-            customStyle="primary"
-            fullWidth 
-            href="/auth?type=signup"
-            onClick={closeMenu}
-          >
-            Sign Up
-          </Button>
+          {isAuthenticated ? (
+            <>
+              <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg mb-4">
+                <Avatar className="h-10 w-10 border-2 border-parkongo-100">
+                  <AvatarImage src={user?.user_metadata?.avatar_url || ''} />
+                  <AvatarFallback className="bg-parkongo-100 text-parkongo-700">
+                    {getUserInitials()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium">{getUserName()}</p>
+                  <p className="text-sm text-gray-500 truncate">{user?.email}</p>
+                </div>
+              </div>
+              <Button 
+                variant="default" 
+                fullWidth 
+                href="/dashboard"
+                onClick={closeMenu}
+              >
+                Dashboard
+              </Button>
+              <Button 
+                variant="outline" 
+                fullWidth 
+                onClick={handleSignOut}
+                className="text-red-600 border-red-200 hover:bg-red-50"
+              >
+                Sign Out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button 
+                variant="outline" 
+                fullWidth 
+                href="/auth?type=signin"
+                onClick={closeMenu}
+              >
+                Sign In
+              </Button>
+              <Button 
+                variant="default"
+                customStyle="primary"
+                fullWidth 
+                href="/auth?type=signup"
+                onClick={closeMenu}
+              >
+                Sign Up
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </header>

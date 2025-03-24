@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
@@ -6,20 +7,28 @@ import Button from '@/components/Button';
 import { Eye, EyeOff, Lock, Mail, User, ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
 
 type AuthType = 'signin' | 'signup';
 
 const Auth: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { signIn, signUp, isAuthenticated } = useAuth();
   const [authType, setAuthType] = useState<AuthType>('signin');
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
+    // Redirect if already authenticated
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    }
+    
     const params = new URLSearchParams(location.search);
     const type = params.get('type');
     if (type === 'signup') {
@@ -27,27 +36,65 @@ const Auth: React.FC = () => {
     } else {
       setAuthType('signin');
     }
-  }, [location]);
+  }, [location, isAuthenticated, navigate]);
   
   const toggleAuthType = () => {
     setAuthType(authType === 'signin' ? 'signup' : 'signin');
     navigate(`/auth?type=${authType === 'signin' ? 'signup' : 'signin'}`);
   };
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setError(null);
     
-    setTimeout(() => {
-      setIsSubmitting(false);
-      
+    try {
+      if (authType === 'signin') {
+        // Handle sign in
+        const { error } = await signIn(email, password);
+        if (error) {
+          throw error;
+        }
+        toast({
+          title: "Welcome back!",
+          description: "You have been signed in successfully.",
+        });
+        navigate('/dashboard');
+      } else {
+        // Extract first and last name
+        const nameParts = name.trim().split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName = nameParts.slice(1).join(' ') || '';
+        
+        // Handle sign up
+        const { error } = await signUp(email, password, {
+          first_name: firstName,
+          last_name: lastName
+        });
+        
+        if (error) {
+          throw error;
+        }
+        
+        toast({
+          title: "Account created successfully!",
+          description: "Please check your email to confirm your account.",
+        });
+        
+        // Navigate to dashboard or confirmation page
+        navigate('/dashboard');
+      }
+    } catch (err: any) {
+      console.error('Authentication error:', err);
+      setError(err.message || 'An error occurred during authentication.');
       toast({
-        title: authType === 'signin' ? "Welcome back!" : "Account created successfully!",
-        description: "You have been redirected to your dashboard.",
+        title: "Authentication Error",
+        description: err.message || 'An error occurred during authentication.',
+        variant: "destructive",
       });
-      
-      navigate('/dashboard');
-    }, 1500);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   
   return (
@@ -72,6 +119,12 @@ const Auth: React.FC = () => {
                         : 'Join Parkongo to find or list parking spaces'}
                     </p>
                   </div>
+                  
+                  {error && (
+                    <div className="mb-6 p-3 bg-red-50 border border-red-100 text-red-600 rounded-lg text-sm">
+                      {error}
+                    </div>
+                  )}
                   
                   <form onSubmit={handleSubmit} className="space-y-6">
                     {authType === 'signup' && (

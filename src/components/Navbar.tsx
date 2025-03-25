@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Car, Menu, Search, X, User, LogOut } from 'lucide-react';
@@ -55,7 +56,7 @@ const Navbar = () => {
           {/* Logo */}
           <Link to="/" className="flex items-center">
             <Car className="h-8 w-8 text-parkongo-600" />
-            <span className="ml-2 text-xl font-bold text-gray-900">ParkEasy</span>
+            <span className="ml-2 text-xl font-bold text-gray-900">ParkOnGo</span>
           </Link>
 
           {/* Desktop Navigation Links */}

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
@@ -118,7 +117,14 @@ const Auth: React.FC = () => {
           throw error;
         }
 
-        if (!data.user?.email_confirmed_at) {
+        // Check if we have a session (development mode bypass)
+        if (data.session) {
+          toast({
+            title: "Account created successfully!",
+            description: "You've been signed in automatically. In production, email verification would be required.",
+          });
+          navigate('/dashboard');
+        } else if (!data.user?.email_confirmed_at) {
           setVerificationSent(true);
           toast({
             title: "Account created successfully!",

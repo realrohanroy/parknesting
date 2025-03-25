@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Car, Menu, Search, X, User, LogOut } from 'lucide-react';
@@ -11,14 +10,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "./ui/dropdown-menu";
-import { useMobile } from '@/hooks/use-mobile';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
 import { NotificationsPanel } from './NotificationsPanel';
 import { toast } from '@/hooks/use-toast';
 
 const Navbar = () => {
   const [isNavOpen, setIsNavOpen] = useState(false);
-  const { isMobile } = useMobile();
+  const { isMobile } = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
   const { user, signOut } = useAuth();

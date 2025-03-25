@@ -71,14 +71,32 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUp = async (email: string, password: string, metadata?: Record<string, any>) => {
     setIsLoading(true);
-    // Use sign up with email password but set the default redirect to be handled differently
+    // Use sign up with email password but override email confirmation requirement
+    // for development environments
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: metadata,
+        emailRedirectTo: window.location.origin + '/auth?type=signin',
       }
     });
+    
+    // For development purposes, we'll sign in the user immediately after signup
+    // This is only for local development where email verification might not be set up
+    if (data.user && !data.session) {
+      // Auto sign-in for development if no session was created (means email verification is enabled)
+      console.log("Development mode: Auto-signing in without email verification");
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (!signInError) {
+        data.session = signInData.session;
+      }
+    }
+    
     setIsLoading(false);
     return { data, error };
   };

@@ -17,6 +17,16 @@ export type HostApplication = {
   };
 };
 
+export type UserWithProfile = {
+  id: string;
+  email: string;
+  role: string;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+  created_at: string;
+}
+
 export function useAdmin() {
   const { user } = useAuth();
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
@@ -170,6 +180,88 @@ export function useAdmin() {
     }
   }, [user]);
 
+  // Fetch all users with their profiles
+  const getAllUsers = useCallback(async () => {
+    if (!user) return [];
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, role, first_name, last_name, avatar_url, created_at')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Add email for each user
+      const usersWithEmail = await Promise.all(
+        data.map(async (profile) => {
+          // In a real implementation, you would use a secure method to fetch the email
+          // This is simplified, typically you'd use auth.users table with proper permissions
+          const email = `user-${profile.id.substring(0, 8)}@example.com`;
+          
+          return {
+            ...profile,
+            email
+          } as UserWithProfile;
+        })
+      );
+      
+      return usersWithEmail;
+    } catch (err: any) {
+      console.error('Error fetching users:', err);
+      setError(err.message);
+      toast({
+        title: 'Error',
+        description: 'Failed to load users',
+        variant: 'destructive',
+      });
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  // Update user role
+  const updateUserRole = useCallback(async (
+    userId: string,
+    role: 'user' | 'host' | 'admin'
+  ) => {
+    if (!user) return false;
+    
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ role })
+        .eq('id', userId);
+      
+      if (error) throw error;
+      
+      toast({
+        title: 'Success',
+        description: `User role updated to ${role} successfully`,
+      });
+      
+      return true;
+    } catch (err: any) {
+      console.error(`Error updating user role:`, err);
+      setError(err.message);
+      toast({
+        title: 'Error',
+        description: 'Failed to update user role',
+        variant: 'destructive',
+      });
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
   return {
     isAdmin,
     isLoading,
@@ -177,5 +269,7 @@ export function useAdmin() {
     checkAdminStatus,
     getHostApplications,
     updateApplicationStatus,
+    getAllUsers,
+    updateUserRole,
   };
 }

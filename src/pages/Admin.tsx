@@ -1,6 +1,7 @@
+
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAdmin, HostApplication } from '@/hooks/use-admin';
+import { useAdmin, HostApplication, UserWithProfile } from '@/hooks/use-admin';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,14 +23,28 @@ import {
   SidebarTrigger,
   SidebarInset,
 } from '@/components/ui/sidebar';
-import { Shield, Users, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import { Shield, Users, Clock, CheckCircle2, XCircle, UserPlus } from 'lucide-react';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const Admin = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { isAdmin, checkAdminStatus, getHostApplications, updateApplicationStatus } = useAdmin();
+  const { 
+    isAdmin, 
+    checkAdminStatus, 
+    getHostApplications, 
+    updateApplicationStatus,
+    getAllUsers,
+    updateUserRole 
+  } = useAdmin();
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('users');
+  const [activeTab, setActiveTab] = useState('hostApplications');
 
   useEffect(() => {
     if (!user) {
@@ -58,6 +73,12 @@ const Admin = () => {
     enabled: !!user && !!isAdmin,
   });
 
+  const { data: users = [], isLoading: isLoadingUsers } = useQuery({
+    queryKey: ['allUsers'],
+    queryFn: getAllUsers,
+    enabled: !!user && !!isAdmin && activeTab === 'users',
+  });
+
   const updateStatus = useMutation({
     mutationFn: async ({ applicationId, status, userId }: { applicationId: string, status: 'approved' | 'rejected', userId: string }) => {
       return await updateApplicationStatus(applicationId, status, userId);
@@ -67,12 +88,25 @@ const Admin = () => {
     },
   });
 
+  const updateRole = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string, role: 'user' | 'host' | 'admin' }) => {
+      return await updateUserRole(userId, role);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['allUsers'] });
+    },
+  });
+
   const handleApprove = (applicationId: string, userId: string) => {
     updateStatus.mutate({ applicationId, status: 'approved', userId });
   };
 
   const handleReject = (applicationId: string, userId: string) => {
     updateStatus.mutate({ applicationId, status: 'rejected', userId });
+  };
+
+  const handleRoleChange = (userId: string, role: 'user' | 'host' | 'admin') => {
+    updateRole.mutate({ userId, role });
   };
 
   if (!user || !isAdmin) {
@@ -226,16 +260,89 @@ const Admin = () => {
                 <CardHeader>
                   <CardTitle>User Management</CardTitle>
                   <CardDescription>
-                    This feature will be available soon.
+                    Manage user roles and permissions
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-center py-8">
-                    <Users className="h-12 w-12 mx-auto text-gray-400 mb-2" />
-                    <h3 className="text-lg font-medium mb-1">Coming Soon</h3>
-                    <p className="text-gray-500">User management features are currently in development.</p>
-                  </div>
+                  {isLoadingUsers ? (
+                    <div className="text-center py-4">Loading users...</div>
+                  ) : users.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Users className="h-12 w-12 mx-auto text-gray-400 mb-2" />
+                      <h3 className="text-lg font-medium mb-1">No users found</h3>
+                      <p className="text-gray-500">There are no users in the system.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {users.map((userData: UserWithProfile) => (
+                        <div key={userData.id} className="border rounded-lg p-4">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <Avatar>
+                                <AvatarImage src={userData.avatar_url || ''} />
+                                <AvatarFallback>
+                                  {userData.first_name?.[0] || ''}{userData.last_name?.[0] || ''}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <h3 className="font-medium">
+                                  {userData.first_name} {userData.last_name}
+                                </h3>
+                                <p className="text-sm text-gray-500">
+                                  {userData.email || 'Email not available'}
+                                </p>
+                                <div className="flex items-center mt-1">
+                                  <Badge variant={
+                                    userData.role === 'admin' ? 'destructive' : 
+                                    userData.role === 'host' ? 'default' : 'outline'
+                                  }>
+                                    {userData.role || 'user'}
+                                  </Badge>
+                                  <span className="text-xs text-gray-500 ml-2">
+                                    Joined on {new Date(userData.created_at).toLocaleDateString()}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex gap-2 items-center">
+                              <Select
+                                defaultValue={userData.role}
+                                onValueChange={(value) => handleRoleChange(userData.id, value as 'user' | 'host' | 'admin')}
+                                disabled={updateRole.isPending}
+                              >
+                                <SelectTrigger className="w-[130px]">
+                                  <SelectValue placeholder="Select Role" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="user">User</SelectItem>
+                                  <SelectItem value="host">Host</SelectItem>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleRoleChange(userData.id, 'admin')}
+                                disabled={userData.role === 'admin' || updateRole.isPending}
+                                className="border-red-500 text-red-600 hover:bg-red-50"
+                              >
+                                <Shield className="mr-1 h-4 w-4" />
+                                Make Admin
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
+                <CardFooter className="flex justify-between">
+                  <p className="text-sm text-gray-500">
+                    Total users: {users.length}
+                  </p>
+                </CardFooter>
               </Card>
             )}
           </div>

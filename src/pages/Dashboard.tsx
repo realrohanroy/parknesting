@@ -439,7 +439,6 @@ const Dashboard: React.FC = () => {
     return <div className="min-h-screen flex items-center justify-center">Redirecting to login...</div>;
   }
 
-  // The rest of the component (the JSX) remains the same
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Navbar />
@@ -936,4 +935,127 @@ const Dashboard: React.FC = () => {
                   </Card>
                 </TabsContent>
 
-                {/* Listings Tab (Only for
+                {/* Listings Tab (Only for hosts) */}
+                {profile?.role === 'host' && (
+                  <TabsContent value="listings" className="space-y-6">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Your Parking Spaces</CardTitle>
+                        <CardDescription>
+                          Manage your listed parking spaces and view their performance.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {listingsLoading ? (
+                          <div className="text-center py-4">Loading listings...</div>
+                        ) : listings.length === 0 ? (
+                          <div className="text-center py-8">
+                            <ParkingCircle className="h-12 w-12 mx-auto text-gray-400 mb-2" />
+                            <h3 className="text-lg font-medium mb-1">No parking spaces listed</h3>
+                            <p className="text-gray-500 mb-4">Start hosting by adding your first parking space.</p>
+                            <Button 
+                              customStyle="primary"
+                              onClick={() => navigate('/for-hosts')}
+                            >
+                              Add Your First Listing
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {listings.map((listing) => {
+                              const stats = listingStatsMap[listing.id] || {
+                                total_bookings: 0,
+                                completed_bookings: 0,
+                                cancelled_bookings: 0,
+                                average_rating: 0,
+                                review_count: 0
+                              };
+                              
+                              return (
+                                <div key={listing.id} className="border rounded-lg overflow-hidden">
+                                  <div className="md:flex">
+                                    <div className="md:w-1/3 h-48 md:h-auto relative">
+                                      <img 
+                                        src={listing.images?.[0] || '/placeholder.svg'} 
+                                        alt={listing.title}
+                                        className="h-full w-full object-cover" 
+                                      />
+                                    </div>
+                                    <div className="p-4 md:w-2/3">
+                                      <div className="flex justify-between items-start">
+                                        <div>
+                                          <h3 className="text-lg font-semibold">{listing.title}</h3>
+                                          <p className="text-gray-500 text-sm">
+                                            {listing.address}, {listing.city}, {listing.state}
+                                          </p>
+                                        </div>
+                                        <Badge 
+                                          variant={listing.is_active ? "outline" : "secondary"}
+                                          className={listing.is_active ? "bg-green-100 text-green-800" : ""}
+                                        >
+                                          {listing.is_active ? "Active" : "Inactive"}
+                                        </Badge>
+                                      </div>
+                                      
+                                      <div className="grid grid-cols-3 gap-2 mt-4">
+                                        <div className="text-center">
+                                          <p className="text-2xl font-bold">{stats.total_bookings}</p>
+                                          <p className="text-xs text-gray-500">Bookings</p>
+                                        </div>
+                                        <div className="text-center">
+                                          <p className="text-2xl font-bold">{stats.review_count}</p>
+                                          <p className="text-xs text-gray-500">Reviews</p>
+                                        </div>
+                                        <div className="text-center">
+                                          <p className="text-2xl font-bold">₹{listing.hourly_rate}/hr</p>
+                                          <p className="text-xs text-gray-500">Rate</p>
+                                        </div>
+                                      </div>
+                                      
+                                      <div className="flex justify-end mt-4 space-x-2">
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm"
+                                          onClick={() => navigate(`/parking/${listing.id}`)}
+                                        >
+                                          View
+                                        </Button>
+                                        <Button 
+                                          variant="outline" 
+                                          size="sm"
+                                        >
+                                          Edit
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CardContent>
+                      <CardFooter>
+                        <Button 
+                          customStyle="primary" 
+                          className="w-full"
+                          onClick={() => navigate('/for-hosts')}
+                        >
+                          Add New Listing
+                        </Button>
+                      </CardFooter>
+                    </Card>
+                  </TabsContent>
+                )}
+              </Tabs>
+            </div>
+          </div>
+        </div>
+      </main>
+      
+      <Footer />
+    </div>
+  );
+};
+
+export default Dashboard;

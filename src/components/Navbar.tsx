@@ -19,7 +19,7 @@ import { supabase } from '@/integrations/supabase/client';
 
 const Navbar = () => {
   const [isNavOpen, setIsNavOpen] = useState(false);
-  const { isMobile } = useIsMobile();
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
   const { user, signOut } = useAuth();

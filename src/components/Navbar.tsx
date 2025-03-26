@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Car, Menu, Search, X, User, LogOut } from 'lucide-react';
+import { Car, Menu, Search, X, User, LogOut, ShieldCheck } from 'lucide-react';
 import { Button } from './ui/button';
 import { 
   DropdownMenu,
@@ -15,6 +15,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/hooks/use-auth';
 import { NotificationsPanel } from './NotificationsPanel';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 const Navbar = () => {
   const [isNavOpen, setIsNavOpen] = useState(false);
@@ -22,6 +23,26 @@ const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, signOut } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  // Check if user is admin
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (!user?.id) return;
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      
+      if (!error && data) {
+        setIsAdmin(data.role === 'admin');
+      }
+    };
+    
+    checkAdminStatus();
+  }, [user]);
 
   // Close nav when route changes
   useEffect(() => {
@@ -79,6 +100,15 @@ const Navbar = () => {
                   Dashboard
                 </Link>
               )}
+              {isAdmin && (
+                <Link 
+                  to="/admin" 
+                  className="text-red-600 hover:text-red-700 transition-colors flex items-center"
+                >
+                  <ShieldCheck className="h-4 w-4 mr-1" />
+                  Admin
+                </Link>
+              )}
             </div>
           )}
 
@@ -116,6 +146,15 @@ const Navbar = () => {
                     <DropdownMenuItem onClick={() => navigate('/dashboard?tab=profile')}>
                       Profile
                     </DropdownMenuItem>
+                    {isAdmin && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => navigate('/admin')} className="text-red-600">
+                          <ShieldCheck className="h-4 w-4 mr-2" />
+                          Admin Dashboard
+                        </DropdownMenuItem>
+                      </>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleSignOut}>
                       <LogOut className="h-4 w-4 mr-2" />
@@ -168,6 +207,15 @@ const Navbar = () => {
               {user && (
                 <Link to="/dashboard" className="px-3 py-2 text-gray-700 hover:bg-gray-100 rounded-md">
                   Dashboard
+                </Link>
+              )}
+              {isAdmin && (
+                <Link 
+                  to="/admin" 
+                  className="px-3 py-2 text-red-600 hover:bg-gray-100 rounded-md flex items-center"
+                >
+                  <ShieldCheck className="h-4 w-4 mr-1" />
+                  Admin Dashboard
                 </Link>
               )}
               {user ? (

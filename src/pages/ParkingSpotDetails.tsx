@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
@@ -263,7 +262,9 @@ const ParkingSpotDetails = () => {
   }
 
   // Parse/check images array
-  const listingImages = Array.isArray(listing.images) ? listing.images : [];
+  const listingImages = Array.isArray(listing?.images) ? 
+    listing.images.map(img => typeof img === 'string' ? img : String(img)) : 
+    [];
 
   return (
     <div className="min-h-screen flex flex-col">

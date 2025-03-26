@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAdmin, HostApplication } from '@/hooks/use-admin';
@@ -32,14 +31,12 @@ const Admin = () => {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState('users');
 
-  // If user is not logged in, redirect to auth page
   useEffect(() => {
     if (!user) {
       navigate('/auth');
       return;
     }
 
-    // Check if the user is an admin
     const checkAdmin = async () => {
       const isAdminUser = await checkAdminStatus();
       if (!isAdminUser) {
@@ -55,14 +52,12 @@ const Admin = () => {
     checkAdmin();
   }, [user, navigate, checkAdminStatus]);
 
-  // Fetch host applications
   const { data: hostApplications = [], isLoading: isLoadingApplications } = useQuery({
     queryKey: ['hostApplications'],
     queryFn: getHostApplications,
     enabled: !!user && !!isAdmin,
   });
 
-  // Update application status mutation
   const updateStatus = useMutation({
     mutationFn: async ({ applicationId, status, userId }: { applicationId: string, status: 'approved' | 'rejected', userId: string }) => {
       return await updateApplicationStatus(applicationId, status, userId);
@@ -72,12 +67,10 @@ const Admin = () => {
     },
   });
 
-  // Handle approval
   const handleApprove = (applicationId: string, userId: string) => {
     updateStatus.mutate({ applicationId, status: 'approved', userId });
   };
 
-  // Handle rejection
   const handleReject = (applicationId: string, userId: string) => {
     updateStatus.mutate({ applicationId, status: 'rejected', userId });
   };
@@ -179,7 +172,7 @@ const Admin = () => {
                                 <div className="flex items-center mt-1">
                                   <Badge variant={
                                     application.status === 'pending' ? 'outline' : 
-                                    application.status === 'approved' ? 'success' : 'destructive'
+                                    application.status === 'approved' ? 'default' : 'destructive'
                                   }>
                                     {application.status}
                                   </Badge>

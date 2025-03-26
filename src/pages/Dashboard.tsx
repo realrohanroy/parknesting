@@ -242,7 +242,7 @@ const Dashboard: React.FC = () => {
           listing_id: listing.id,
           total_bookings: totalBookings,
           completed_bookings: completedBookings,
-          cancelled_bookings: cancelled_bookings,
+          cancelled_bookings: cancelledBookings,
           review_count: reviewCount,
           average_rating: averageRating
         };

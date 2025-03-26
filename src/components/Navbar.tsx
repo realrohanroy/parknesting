@@ -53,10 +53,13 @@ const Navbar = () => {
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white shadow">
       <div className="container mx-auto px-4 md:px-6 py-2">
         <div className="flex items-center justify-between h-14">
-          {/* Logo */}
+          {/* Logo - Matched with footer style */}
           <Link to="/" className="flex items-center">
             <Car className="h-8 w-8 text-parkongo-600" />
-            <span className="ml-2 text-xl font-bold text-gray-900">ParkOnGo</span>
+            <span className="ml-2 text-2xl font-bold">
+              <span className="text-parkongo-700">Park</span>
+              <span className="text-parkongo-500">ongo</span>
+            </span>
           </Link>
 
           {/* Desktop Navigation Links */}
@@ -122,13 +125,22 @@ const Navbar = () => {
                 </DropdownMenu>
               </>
             ) : (
-              <Button 
-                variant="default" 
-                onClick={() => navigate('/auth')}
-                className="bg-parkongo-600 hover:bg-parkongo-700"
-              >
-                Sign In
-              </Button>
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={() => navigate('/auth?type=signup')}
+                  className="bg-white hover:bg-gray-50"
+                >
+                  Sign Up
+                </Button>
+                <Button 
+                  variant="default" 
+                  onClick={() => navigate('/auth?type=signin')}
+                  className="bg-parkongo-600 hover:bg-parkongo-700"
+                >
+                  Sign In
+                </Button>
+              </>
             )}
 
             {/* Mobile Menu Button */}
@@ -168,9 +180,14 @@ const Navbar = () => {
                   Sign Out
                 </Button>
               ) : (
-                <Link to="/auth" className="px-3 py-2 text-parkongo-600 hover:bg-gray-100 rounded-md font-medium">
-                  Sign In / Sign Up
-                </Link>
+                <>
+                  <Link to="/auth?type=signin" className="px-3 py-2 text-parkongo-600 hover:bg-gray-100 rounded-md font-medium">
+                    Sign In
+                  </Link>
+                  <Link to="/auth?type=signup" className="px-3 py-2 text-parkongo-600 hover:bg-gray-100 rounded-md font-medium">
+                    Sign Up
+                  </Link>
+                </>
               )}
             </div>
           </div>

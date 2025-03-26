@@ -1,43 +1,45 @@
 
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAdmin, HostApplication } from '@/hooks/use-admin';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
-import { ShieldAlert, ShieldCheck, UserX, Users } from 'lucide-react';
-import { useAdmin, HostApplication } from '@/hooks/use-admin';
-import { useAuth } from '@/hooks/use-auth';
-import { format } from 'date-fns';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/use-auth';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarProvider,
+  SidebarTrigger,
+  SidebarInset,
+} from '@/components/ui/sidebar';
+import { Shield, Users, Clock, CheckCircle2, XCircle } from 'lucide-react';
 
-const AdminDashboard: React.FC = () => {
+const Admin = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { 
-    isAdmin, 
-    isLoading, 
-    checkAdminStatus, 
-    getHostApplications, 
-    updateApplicationStatus 
-  } = useAdmin();
-  const [activeTab, setActiveTab] = useState('host-applications');
-  const [hostApplications, setHostApplications] = useState<HostApplication[]>([]);
-  const [applicationLoading, setApplicationLoading] = useState(false);
+  const { isAdmin, checkAdminStatus, getHostApplications, updateApplicationStatus } = useAdmin();
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState('users');
 
-  // Check if user is admin on component mount
+  // If user is not logged in, redirect to auth page
   useEffect(() => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
+    // Check if the user is an admin
     const checkAdmin = async () => {
       const isAdminUser = await checkAdminStatus();
       if (!isAdminUser) {
@@ -46,219 +48,210 @@ const AdminDashboard: React.FC = () => {
           description: "You don't have permission to access this page.",
           variant: "destructive",
         });
-        navigate('/dashboard');
+        navigate('/');
       }
     };
-    
-    if (user) {
-      checkAdmin();
-    } else {
-      navigate('/auth');
-    }
-  }, [user, checkAdminStatus, navigate]);
+
+    checkAdmin();
+  }, [user, navigate, checkAdminStatus]);
 
   // Fetch host applications
-  useEffect(() => {
-    const fetchApplications = async () => {
-      if (isAdmin) {
-        setApplicationLoading(true);
-        const applications = await getHostApplications();
-        setHostApplications(applications);
-        setApplicationLoading(false);
-      }
-    };
-    
-    fetchApplications();
-  }, [isAdmin, getHostApplications]);
+  const { data: hostApplications = [], isLoading: isLoadingApplications } = useQuery({
+    queryKey: ['hostApplications'],
+    queryFn: getHostApplications,
+    enabled: !!user && !!isAdmin,
+  });
 
-  // Handle application status update
-  const handleStatusUpdate = async (applicationId: string, status: 'approved' | 'rejected', userId: string) => {
-    const success = await updateApplicationStatus(applicationId, status, userId);
-    if (success) {
-      // Update local state to reflect changes
-      setHostApplications(prev => 
-        prev.map(app => 
-          app.id === applicationId 
-            ? { ...app, status } 
-            : app
-        )
-      );
-    }
+  // Update application status mutation
+  const updateStatus = useMutation({
+    mutationFn: async ({ applicationId, status, userId }: { applicationId: string, status: 'approved' | 'rejected', userId: string }) => {
+      return await updateApplicationStatus(applicationId, status, userId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['hostApplications'] });
+    },
+  });
+
+  // Handle approval
+  const handleApprove = (applicationId: string, userId: string) => {
+    updateStatus.mutate({ applicationId, status: 'approved', userId });
   };
 
-  if (isLoading) {
+  // Handle rejection
+  const handleReject = (applicationId: string, userId: string) => {
+    updateStatus.mutate({ applicationId, status: 'rejected', userId });
+  };
+
+  if (!user || !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p>Loading admin dashboard...</p>
+        <p>Checking permissions...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50">
+    <div className="min-h-screen flex flex-col">
       <Navbar />
       
-      <main className="flex-1 pt-20 pb-16">
-        <div className="container mx-auto px-4 md:px-6 py-8">
-          <div className="flex justify-between items-center mb-6">
-            <div>
-              <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-              <p className="text-gray-500">Manage Parkongo platform operations</p>
+      <SidebarProvider defaultOpen={true}>
+        <Sidebar>
+          <SidebarHeader>
+            <div className="flex items-center gap-2 px-2">
+              <Shield className="h-6 w-6 text-parkongo-600" />
+              <h2 className="text-lg font-semibold">Admin Dashboard</h2>
             </div>
-            <Badge className="bg-red-500">Admin Access</Badge>
-          </div>
+          </SidebarHeader>
           
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid grid-cols-2 md:w-[400px] mb-6">
-              <TabsTrigger value="host-applications" className="flex items-center">
-                <ShieldCheck className="w-4 h-4 mr-2" />
-                Host Applications
-              </TabsTrigger>
-              <TabsTrigger value="users" className="flex items-center">
-                <Users className="w-4 h-4 mr-2" />
-                User Management
-              </TabsTrigger>
-            </TabsList>
+          <SidebarContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton 
+                  isActive={activeTab === 'users'}
+                  onClick={() => setActiveTab('users')}
+                >
+                  <Users className="mr-2 h-4 w-4" />
+                  <span>Users</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              
+              <SidebarMenuItem>
+                <SidebarMenuButton 
+                  isActive={activeTab === 'hostApplications'}
+                  onClick={() => setActiveTab('hostApplications')}
+                >
+                  <Clock className="mr-2 h-4 w-4" />
+                  <span>Host Applications</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarContent>
+          
+          <SidebarFooter>
+            <div className="px-3 py-2">
+              <Badge variant="outline" className="w-full justify-center">
+                Admin Mode
+              </Badge>
+            </div>
+          </SidebarFooter>
+        </Sidebar>
+        
+        <SidebarInset className="p-4 md:p-6">
+          <div className="container mx-auto max-w-6xl">
+            <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
             
-            {/* Host Applications Tab */}
-            <TabsContent value="host-applications" className="space-y-6">
+            {activeTab === 'hostApplications' && (
               <Card>
                 <CardHeader>
                   <CardTitle>Host Applications</CardTitle>
                   <CardDescription>
-                    Review and process applications from users who want to become hosts.
+                    Review and manage user applications to become hosts.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {applicationLoading ? (
-                    <div className="text-center py-8">Loading applications...</div>
+                  {isLoadingApplications ? (
+                    <div className="text-center py-4">Loading applications...</div>
                   ) : hostApplications.length === 0 ? (
                     <div className="text-center py-8">
-                      <ShieldAlert className="h-12 w-12 mx-auto text-gray-400 mb-2" />
-                      <h3 className="text-lg font-medium mb-2">No pending applications</h3>
-                      <p className="text-gray-500">
-                        There are no host applications requiring your attention.
-                      </p>
+                      <Clock className="h-12 w-12 mx-auto text-gray-400 mb-2" />
+                      <h3 className="text-lg font-medium mb-1">No pending applications</h3>
+                      <p className="text-gray-500">There are no host applications to review at this time.</p>
                     </div>
                   ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>User</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Applied On</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {hostApplications.map((application) => (
-                          <TableRow key={application.id}>
-                            <TableCell>
-                              <div className="flex items-center gap-3">
-                                <Avatar>
-                                  <AvatarImage src={application.profiles?.avatar_url || ''} />
-                                  <AvatarFallback>
-                                    {application.profiles?.first_name?.[0] || ''}
-                                    {application.profiles?.last_name?.[0] || ''}
-                                  </AvatarFallback>
-                                </Avatar>
-                                <div>
-                                  <p className="font-medium">
-                                    {application.profiles?.first_name} {application.profiles?.last_name}
-                                  </p>
-                                  <p className="text-sm text-gray-500">
-                                    {application.profiles?.email && 
-                                      application.profiles.email.email}
-                                  </p>
+                    <div className="space-y-4">
+                      {hostApplications.map((application: HostApplication) => (
+                        <div key={application.id} className="border rounded-lg p-4">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div className="flex items-center gap-3">
+                              <Avatar>
+                                <AvatarImage src={application.profiles?.avatar_url || ''} />
+                                <AvatarFallback>
+                                  {application.profiles?.first_name?.[0] || ''}{application.profiles?.last_name?.[0] || ''}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div>
+                                <h3 className="font-medium">
+                                  {application.profiles?.first_name} {application.profiles?.last_name}
+                                </h3>
+                                <p className="text-sm text-gray-500">
+                                  {application.profiles?.email || 'Email not available'}
+                                </p>
+                                <div className="flex items-center mt-1">
+                                  <Badge variant={
+                                    application.status === 'pending' ? 'outline' : 
+                                    application.status === 'approved' ? 'success' : 'destructive'
+                                  }>
+                                    {application.status}
+                                  </Badge>
+                                  <span className="text-xs text-gray-500 ml-2">
+                                    Applied on {new Date(application.created_at).toLocaleDateString()}
+                                  </span>
                                 </div>
                               </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge
-                                className={
-                                  application.status === 'pending'
-                                    ? 'bg-yellow-500'
-                                    : application.status === 'approved'
-                                    ? 'bg-green-500'
-                                    : 'bg-red-500'
-                                }
-                              >
-                                {application.status.charAt(0).toUpperCase() + application.status.slice(1)}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {format(new Date(application.created_at), 'PPP')}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {application.status === 'pending' ? (
-                                <div className="flex items-center justify-end gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="bg-red-50 text-red-600 border-red-200 hover:bg-red-100"
-                                    onClick={() => handleStatusUpdate(
-                                      application.id, 
-                                      'rejected',
-                                      application.user_id
-                                    )}
-                                  >
-                                    <UserX className="h-4 w-4 mr-1" />
-                                    Reject
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="bg-green-50 text-green-600 border-green-200 hover:bg-green-100"
-                                    onClick={() => handleStatusUpdate(
-                                      application.id, 
-                                      'approved',
-                                      application.user_id
-                                    )}
-                                  >
-                                    <ShieldCheck className="h-4 w-4 mr-1" />
-                                    Approve
-                                  </Button>
-                                </div>
-                              ) : (
-                                <span className="text-gray-500 text-sm">
-                                  {application.status === 'approved' ? 'Approved' : 'Rejected'}
-                                </span>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                            </div>
+                            
+                            {application.status === 'pending' && (
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-green-500 text-green-600 hover:bg-green-50"
+                                  onClick={() => handleApprove(application.id, application.user_id)}
+                                  disabled={updateStatus.isPending}
+                                >
+                                  <CheckCircle2 className="mr-1 h-4 w-4" />
+                                  Approve
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-red-500 text-red-600 hover:bg-red-50"
+                                  onClick={() => handleReject(application.id, application.user_id)}
+                                  disabled={updateStatus.isPending}
+                                >
+                                  <XCircle className="mr-1 h-4 w-4" />
+                                  Reject
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </CardContent>
+                <CardFooter className="flex justify-between">
+                  <p className="text-sm text-gray-500">
+                    Total applications: {hostApplications.length}
+                  </p>
+                </CardFooter>
               </Card>
-            </TabsContent>
+            )}
             
-            {/* Users Management Tab - placeholder for future implementation */}
-            <TabsContent value="users" className="space-y-6">
+            {activeTab === 'users' && (
               <Card>
                 <CardHeader>
                   <CardTitle>User Management</CardTitle>
                   <CardDescription>
-                    Manage user accounts and permissions.
+                    This feature will be available soon.
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="py-8 text-center">
-                  <Users className="h-12 w-12 mx-auto text-gray-400 mb-2" />
-                  <h3 className="text-lg font-medium mb-2">Coming Soon</h3>
-                  <p className="text-gray-500">
-                    User management features will be available in a future update.
-                  </p>
+                <CardContent>
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 mx-auto text-gray-400 mb-2" />
+                    <h3 className="text-lg font-medium mb-1">Coming Soon</h3>
+                    <p className="text-gray-500">User management features are currently in development.</p>
+                  </div>
                 </CardContent>
               </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
-      </main>
+            )}
+          </div>
+        </SidebarInset>
+      </SidebarProvider>
       
       <Footer />
     </div>
   );
 };
 
-export default AdminDashboard;
+export default Admin;

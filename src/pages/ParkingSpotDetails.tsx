@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import Navbar from '@/components/Navbar';
@@ -49,42 +50,61 @@ const ParkingSpotDetails = () => {
             last_name,
             avatar_url,
             created_at
-          ),
-          listing_features:id (
-            feature,
-            value
           )
         `)
         .eq('id', id)
         .single();
       
       if (error) throw error;
-      return data;
+      
+      // Fetch listing features separately
+      const { data: features, error: featuresError } = await supabase
+        .from('listing_features')
+        .select('feature, value')
+        .eq('listing_id', id);
+      
+      if (featuresError) throw featuresError;
+      
+      return {
+        ...data,
+        listing_features: features || []
+      };
     },
     enabled: !!id,
   });
 
   // Fetch reviews
-  const { data: reviews = [] } = useQuery({
+  const { data: reviews = [], isLoading: reviewsLoading } = useQuery({
     queryKey: ['reviews', id],
     queryFn: async () => {
       if (!id) return [];
       
-      const { data, error } = await supabase
+      // First get the reviews
+      const { data: reviewsData, error: reviewsError } = await supabase
         .from('reviews')
-        .select(`
-          *,
-          profiles:user_id (
-            first_name,
-            last_name,
-            avatar_url
-          )
-        `)
+        .select('*')
         .eq('listing_id', id)
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
-      return data;
+      if (reviewsError) throw reviewsError;
+      
+      // Then fetch profile data for each reviewer
+      const reviewsWithProfiles = await Promise.all(
+        reviewsData.map(async (review) => {
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('first_name, last_name, avatar_url')
+            .eq('id', review.reviewer_id)
+            .single();
+          
+          return {
+            ...review,
+            profiles: profile || { first_name: null, last_name: null, avatar_url: null }
+          };
+        })
+      );
+      
+      return reviewsWithProfiles;
     },
     enabled: !!id,
   });
@@ -147,7 +167,7 @@ const ParkingSpotDetails = () => {
       });
       queryClient.invalidateQueries({ queryKey: ['favorite', id, user?.id] });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
         title: "Error",
         description: `Failed to update favorites: ${error.message}`,
@@ -198,7 +218,7 @@ const ParkingSpotDetails = () => {
 
   // Format features
   const formatFeatures = () => {
-    if (!listing?.listing_features) return [];
+    if (!listing?.listing_features || !Array.isArray(listing.listing_features)) return [];
     
     const featureLabels: Record<string, string> = {
       security_camera: "Security Camera",
@@ -241,6 +261,9 @@ const ParkingSpotDetails = () => {
       </div>
     );
   }
+
+  // Parse/check images array
+  const listingImages = Array.isArray(listing.images) ? listing.images : [];
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -296,10 +319,10 @@ const ParkingSpotDetails = () => {
             <div className="lg:col-span-8 xl:col-span-9">
               {/* Images */}
               <div className="mb-8 rounded-xl overflow-hidden">
-                {listing.images && listing.images.length > 0 ? (
+                {listingImages.length > 0 ? (
                   <div className="aspect-video bg-gray-100">
                     <img 
-                      src={listing.images[0]} 
+                      src={listingImages[0]} 
                       alt={listing.title} 
                       className="w-full h-full object-cover"
                     />
@@ -351,7 +374,7 @@ const ParkingSpotDetails = () => {
                           <div>
                             <p className="text-sm text-gray-500">Size</p>
                             <p className="font-medium">
-                              {listing.size || "Standard"}
+                              Standard
                             </p>
                           </div>
                         </div>
@@ -413,7 +436,9 @@ const ParkingSpotDetails = () => {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      {reviews.length > 0 ? (
+                      {reviewsLoading ? (
+                        <div className="text-center py-4">Loading reviews...</div>
+                      ) : reviews.length > 0 ? (
                         <div className="space-y-6">
                           {reviews.map((review) => (
                             <div key={review.id} className="border-b pb-4 last:border-0">

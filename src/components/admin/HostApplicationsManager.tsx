@@ -26,6 +26,11 @@ const HostApplicationsManager = ({
 }: HostApplicationsManagerProps) => {
   const queryClient = useQueryClient();
 
+  // Log the host applications data received from props
+  React.useEffect(() => {
+    console.log('HostApplicationsManager received applications:', hostApplications);
+  }, [hostApplications]);
+
   const updateStatus = useMutation({
     mutationFn: async ({ applicationId, status, userId }: { applicationId: string, status: 'approved' | 'rejected', userId: string }) => {
       return await updateApplicationStatus(applicationId, status, userId);
@@ -55,6 +60,12 @@ const HostApplicationsManager = ({
     return hostApplications.filter((app: HostApplication) => app.status === 'approved' || app.status === 'rejected');
   };
 
+  // Log the filtered applications
+  React.useEffect(() => {
+    console.log('Pending applications:', getPendingApplications());
+    console.log('Processed applications:', getProcessedApplications());
+  }, [hostApplications]);
+
   return (
     <div className="space-y-6">
       <Card>
@@ -73,7 +84,7 @@ const HostApplicationsManager = ({
             <div className="text-center py-8">
               <CheckCircle2 className="h-12 w-12 mx-auto text-green-500 mb-2" />
               <h3 className="text-lg font-medium mb-1">No pending applications</h3>
-              <p className="text-gray-500">All host applications have been processed.</p>
+              <p className="text-gray-500">All host applications have been processed or no applications have been submitted.</p>
             </div>
           ) : (
             <Table>

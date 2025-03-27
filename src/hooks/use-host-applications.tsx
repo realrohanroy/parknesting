@@ -32,6 +32,8 @@ export function useHostApplications(user: User | null) {
       
       if (applicationsError) throw applicationsError;
       
+      console.log('Raw host applications data:', applications);
+      
       // Process the applications to match the expected format
       const processedApplications = applications.map(application => {
         // Create default profile data
@@ -72,6 +74,7 @@ export function useHostApplications(user: User | null) {
         } as HostApplication;
       });
       
+      console.log('Processed host applications:', processedApplications);
       return processedApplications;
     } catch (err: any) {
       console.error('Error fetching host applications:', err);

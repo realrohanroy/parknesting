@@ -63,6 +63,13 @@ const Admin = () => {
     enabled: !!user && !!isAdmin,
   });
 
+  // Debug logging for host applications
+  useEffect(() => {
+    console.log('Host applications from query:', hostApplications);
+    console.log('Is loading applications:', isLoadingApplications);
+    console.log('Is admin:', isAdmin);
+  }, [hostApplications, isLoadingApplications, isAdmin]);
+
   const { 
     data: users = [], 
     isLoading: isLoadingUsers,
@@ -111,13 +118,26 @@ const Admin = () => {
             <h1 className="text-2xl font-bold mb-6">Admin Dashboard</h1>
             
             {activeTab === 'hostApplications' && (
-              <HostApplicationsManager
-                hostApplications={hostApplications}
-                isLoadingApplications={isLoadingApplications}
-                processingIds={processingIds}
-                updateApplicationStatus={wrappedUpdateApplicationStatus}
-                refetchApplications={refetchApplications}
-              />
+              <>
+                {isLoadingApplications ? (
+                  <p>Loading applications...</p>
+                ) : (
+                  <>
+                    <p className="mb-4 text-sm text-gray-500">
+                      {hostApplications.length === 0 
+                        ? "No host applications found. Applications will appear here when users apply to become hosts." 
+                        : `Showing ${hostApplications.length} host application(s)`}
+                    </p>
+                    <HostApplicationsManager
+                      hostApplications={hostApplications}
+                      isLoadingApplications={isLoadingApplications}
+                      processingIds={processingIds}
+                      updateApplicationStatus={wrappedUpdateApplicationStatus}
+                      refetchApplications={refetchApplications}
+                    />
+                  </>
+                )}
+              </>
             )}
             
             {activeTab === 'users' && (

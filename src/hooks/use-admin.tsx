@@ -93,13 +93,19 @@ export function useAdmin() {
           avatar_url: null 
         };
         
-        // Check if profiles exists and is not an error
-        // Added null check to handle the case when profiles is null
-        const profileData = application.profiles != null && 
-          typeof application.profiles === 'object' && 
-          !('error' in application.profiles) 
-            ? application.profiles 
-            : defaultProfile;
+        // Create a new profiles object with safe properties
+        let profileData = defaultProfile;
+        
+        // Check if profiles exists, is not null, and is not an error
+        if (application.profiles !== null && 
+            typeof application.profiles === 'object' && 
+            !('error' in application.profiles)) {
+          profileData = {
+            first_name: application.profiles.first_name,
+            last_name: application.profiles.last_name,
+            avatar_url: application.profiles.avatar_url
+          };
+        }
         
         // Simulate email (in a real app, you'd use a secure method)
         const email = `user-${application.user_id.substring(0, 8)}@example.com`;
@@ -107,9 +113,7 @@ export function useAdmin() {
         return {
           ...application,
           profiles: {
-            first_name: profileData.first_name,
-            last_name: profileData.last_name,
-            avatar_url: profileData.avatar_url,
+            ...profileData,
             email
           }
         } as HostApplication;

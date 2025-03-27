@@ -44,10 +44,8 @@ export function useHostApplications(user: User | null) {
         // Create a new profiles object with safe properties
         let profileData = defaultProfile;
         
-        // Check if profiles exists, is not null, and is not an error
-        if (application.profiles !== null && 
-            typeof application.profiles === 'object' && 
-            !('error' in application.profiles)) {
+        // Check if profiles exists and is not null
+        if (application.profiles && typeof application.profiles === 'object') {
           // Type assertion to handle nullable properties safely
           const profiles = application.profiles as { 
             first_name: string | null; 

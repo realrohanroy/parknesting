@@ -1,3 +1,4 @@
+
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/use-auth';
 import { supabase } from '@/integrations/supabase/client';
@@ -85,12 +86,19 @@ export function useAdmin() {
       
       // Process the applications to match the expected format
       const processedApplications = applications.map(application => {
-        // Get the embedded profile data
-        const profileData = application.profiles || { 
+        // Create default profile data
+        const defaultProfile = { 
           first_name: null, 
           last_name: null, 
           avatar_url: null 
         };
+        
+        // Check if profiles exists and is not an error
+        const profileData = application.profiles && 
+          typeof application.profiles === 'object' && 
+          !('error' in application.profiles) 
+            ? application.profiles 
+            : defaultProfile;
         
         // Simulate email (in a real app, you'd use a secure method)
         const email = `user-${application.user_id.substring(0, 8)}@example.com`;

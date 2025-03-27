@@ -61,7 +61,7 @@ export function useAdmin() {
     }
   }, [user]);
 
-  // Fetch all host applications
+  // Fetch all host applications with optimized query
   const getHostApplications = useCallback(async () => {
     if (!user) return [];
     
@@ -69,49 +69,43 @@ export function useAdmin() {
     setError(null);
     
     try {
-      // First fetch the host applications
+      // Fetch applications with profiles in a single query
       const { data: applications, error: applicationsError } = await supabase
         .from('host_applications')
-        .select('*')
+        .select(`
+          *,
+          profiles:user_id (
+            first_name, 
+            last_name, 
+            avatar_url
+          )
+        `)
         .order('created_at', { ascending: false });
       
       if (applicationsError) throw applicationsError;
       
-      // Then fetch profiles for each user separately
-      const applicationsWithProfiles = await Promise.all(
-        applications.map(async (application) => {
-          const { data: profile, error: profileError } = await supabase
-            .from('profiles')
-            .select('first_name, last_name, avatar_url')
-            .eq('id', application.user_id)
-            .single();
-          
-          // Get email from auth.users via email function or API
-          const { data: userData, error: userError } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('id', application.user_id)
-            .single();
-          
-          // In a real implementation, you would use a secure method to fetch the email
-          // This is a placeholder
-          let email = null;
-          if (userData) {
-            // Simulate email retrieval
-            email = `user-${application.user_id.substring(0, 8)}@example.com`;
+      // Process the applications to match the expected format
+      const processedApplications = applications.map(application => {
+        // Get the embedded profile data
+        const profileData = application.profiles || { 
+          first_name: null, 
+          last_name: null, 
+          avatar_url: null 
+        };
+        
+        // Simulate email (in a real app, you'd use a secure method)
+        const email = `user-${application.user_id.substring(0, 8)}@example.com`;
+        
+        return {
+          ...application,
+          profiles: {
+            ...profileData,
+            email
           }
-          
-          return {
-            ...application,
-            profiles: {
-              ...(profile || { first_name: null, last_name: null, avatar_url: null }),
-              email
-            }
-          } as HostApplication;
-        })
-      );
+        } as HostApplication;
+      });
       
-      return applicationsWithProfiles;
+      return processedApplications;
     } catch (err: any) {
       console.error('Error fetching host applications:', err);
       setError(err.message);
@@ -126,7 +120,7 @@ export function useAdmin() {
     }
   }, [user]);
 
-  // Update host application status
+  // Update host application status with optimistic updates
   const updateApplicationStatus = useCallback(async (
     applicationId: string,
     status: 'approved' | 'rejected',
@@ -134,30 +128,41 @@ export function useAdmin() {
   ) => {
     if (!user) return false;
     
-    setIsLoading(true);
     setError(null);
     
     try {
-      // Start a transaction
-      const { error: statusError } = await supabase
-        .from('host_applications')
-        .update({
-          status,
-          processed_by: user.id,
-          processed_at: new Date().toISOString(),
-        })
-        .eq('id', applicationId);
+      // Perform the updates in a transaction-like manner
+      const updates = [];
       
-      if (statusError) throw statusError;
+      // 1. Update application status
+      updates.push(
+        supabase
+          .from('host_applications')
+          .update({
+            status,
+            processed_by: user.id,
+            processed_at: new Date().toISOString(),
+          })
+          .eq('id', applicationId)
+      );
       
-      // If approved, update the user's role to 'host'
+      // 2. If approved, update user role
       if (status === 'approved') {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({ role: 'host' })
-          .eq('id', userId);
-        
-        if (profileError) throw profileError;
+        updates.push(
+          supabase
+            .from('profiles')
+            .update({ role: 'host' })
+            .eq('id', userId)
+        );
+      }
+      
+      // Execute all updates
+      const results = await Promise.all(updates);
+      
+      // Check for errors
+      const errors = results.filter(result => result.error !== null);
+      if (errors.length > 0) {
+        throw new Error(errors[0].error.message);
       }
       
       toast({
@@ -175,12 +180,10 @@ export function useAdmin() {
         variant: 'destructive',
       });
       return false;
-    } finally {
-      setIsLoading(false);
     }
   }, [user]);
 
-  // Fetch all users with their profiles
+  // Fetch all users with their profiles using a single optimized query
   const getAllUsers = useCallback(async () => {
     if (!user) return [];
     
@@ -195,19 +198,16 @@ export function useAdmin() {
       
       if (error) throw error;
       
-      // Add email for each user
-      const usersWithEmail = await Promise.all(
-        data.map(async (profile) => {
-          // In a real implementation, you would use a secure method to fetch the email
-          // This is simplified, typically you'd use auth.users table with proper permissions
-          const email = `user-${profile.id.substring(0, 8)}@example.com`;
-          
-          return {
-            ...profile,
-            email
-          } as UserWithProfile;
-        })
-      );
+      // Add email for each user (simulated)
+      const usersWithEmail = data.map(profile => {
+        // In a real implementation, you would use a secure method to fetch the email
+        const email = `user-${profile.id.substring(0, 8)}@example.com`;
+        
+        return {
+          ...profile,
+          email
+        } as UserWithProfile;
+      });
       
       return usersWithEmail;
     } catch (err: any) {
@@ -224,14 +224,13 @@ export function useAdmin() {
     }
   }, [user]);
 
-  // Update user role
+  // Update user role with immediate UI feedback
   const updateUserRole = useCallback(async (
     userId: string,
     role: 'user' | 'host' | 'admin'
   ) => {
     if (!user) return false;
     
-    setIsLoading(true);
     setError(null);
     
     try {
@@ -257,8 +256,6 @@ export function useAdmin() {
         variant: 'destructive',
       });
       return false;
-    } finally {
-      setIsLoading(false);
     }
   }, [user]);
 

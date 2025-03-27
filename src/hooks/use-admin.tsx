@@ -100,10 +100,17 @@ export function useAdmin() {
         if (application.profiles !== null && 
             typeof application.profiles === 'object' && 
             !('error' in application.profiles)) {
+          // Type assertion to handle nullable properties safely
+          const profiles = application.profiles as { 
+            first_name: string | null; 
+            last_name: string | null; 
+            avatar_url: string | null;
+          };
+          
           profileData = {
-            first_name: application.profiles.first_name,
-            last_name: application.profiles.last_name,
-            avatar_url: application.profiles.avatar_url
+            first_name: profiles.first_name,
+            last_name: profiles.last_name,
+            avatar_url: profiles.avatar_url
           };
         }
         

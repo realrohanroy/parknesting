@@ -94,7 +94,8 @@ export function useAdmin() {
         };
         
         // Check if profiles exists and is not an error
-        const profileData = application.profiles && 
+        // Added null check to handle the case when profiles is null
+        const profileData = application.profiles != null && 
           typeof application.profiles === 'object' && 
           !('error' in application.profiles) 
             ? application.profiles 

@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { useAdmin } from '@/hooks/use-admin'; // Fixed missing import
+import { useAdmin } from '@/hooks/use-admin';
 import {
   SidebarProvider,
   SidebarInset,
@@ -95,7 +95,7 @@ const Admin = () => {
 
   // Query for host applications
   const { 
-    data: hostApplications = [] as HostApplication[], // Fixed type assertion
+    data: hostApplications = [] as HostApplication[],
     isLoading: isLoadingApplications,
     refetch: hostApplicationsRefetch,
     error: hostApplicationsError
@@ -149,7 +149,7 @@ const Admin = () => {
   }, []);
 
   const { 
-    data: users = [], // Type will be inferred from getAllUsers return type
+    data: users = [],
     isLoading: isLoadingUsers,
     refetch: usersRefetch
   } = useQuery({
@@ -215,6 +215,11 @@ const Admin = () => {
     );
   }
 
+  // Ensure hostApplications is always an array
+  const safeHostApplications = Array.isArray(hostApplications) ? hostApplications : [];
+  // Ensure users is always an array
+  const safeUsers = Array.isArray(users) ? users : [];
+
   return (
     <div className="min-h-screen flex flex-col">
       <Navbar />
@@ -243,9 +248,9 @@ const Admin = () => {
                   <>
                     <div className="flex justify-between items-center mb-4">
                       <p className="text-sm text-gray-500">
-                        {hostApplications.length === 0 
+                        {safeHostApplications.length === 0 
                           ? "No host applications found. Applications will appear here when users apply to become hosts." 
-                          : `Showing ${hostApplications.length} host application(s)`}
+                          : `Showing ${safeHostApplications.length} host application(s)`}
                       </p>
                       <button 
                         onClick={() => {
@@ -262,7 +267,7 @@ const Admin = () => {
                       </button>
                     </div>
                     <HostApplicationsManager
-                      hostApplications={hostApplications as HostApplication[]} // Ensure proper typing here
+                      hostApplications={safeHostApplications}
                       isLoadingApplications={isLoadingApplications}
                       processingIds={processingIds}
                       updateApplicationStatus={wrappedUpdateApplicationStatus}
@@ -275,7 +280,7 @@ const Admin = () => {
             
             {activeTab === 'users' && (
               <UserManager
-                users={Array.isArray(users) ? users : []} // Ensure proper typing here
+                users={safeUsers}
                 isLoadingUsers={isLoadingUsers}
                 processingIds={processingIds}
                 updateUserRole={wrappedUpdateUserRole}

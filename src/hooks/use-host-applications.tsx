@@ -22,19 +22,14 @@ export function useHostApplications(user: User | null) {
     try {
       console.log('Fetching host applications for user:', user.id);
       
-      // Use .from instead of destructuring for better error handling
+      // Modified query to use join instead of the foreign key reference 
       const response = await supabase
         .from('host_applications')
         .select(`
           *,
-          profiles:user_id (
-            id,
-            first_name, 
-            last_name, 
-            avatar_url,
-            email
-          )
+          profiles:profiles(id, first_name, last_name, avatar_url, email)
         `)
+        .eq('profiles.id', 'user_id')
         .order('created_at', { ascending: false });
       
       // Detailed error logging

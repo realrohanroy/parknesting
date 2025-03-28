@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { HostApplication } from '@/types/admin';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,11 @@ const ProcessedApplications = ({
   applications,
   isLoading
 }: ProcessedApplicationsProps) => {
+  // Add debug log to track when this component renders and what data it receives
+  useEffect(() => {
+    console.log('ProcessedApplications rendered with:', applications);
+  }, [applications]);
+
   if (isLoading) {
     return (
       <div className="text-center py-4 flex justify-center">
@@ -23,7 +28,7 @@ const ProcessedApplications = ({
     );
   }
 
-  if (applications.length === 0) {
+  if (!applications || applications.length === 0) {
     return (
       <div className="text-center py-8">
         <Clock className="h-12 w-12 mx-auto text-gray-400 mb-2" />

@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAdmin, HostApplication, UserWithProfile } from '@/hooks/use-admin';
 import Navbar from '@/components/Navbar';
@@ -12,7 +12,7 @@ import {
   SidebarInset,
 } from '@/components/ui/sidebar';
 
-// Import our new components
+// Import our components
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import HostApplicationsManager from '@/components/admin/HostApplicationsManager';
 import UserManager from '@/components/admin/UserManager';
@@ -40,6 +40,8 @@ const Admin = () => {
 
     const checkAdmin = async () => {
       const isAdminUser = await checkAdminStatus();
+      console.log('Is admin user:', isAdminUser);
+      
       if (!isAdminUser) {
         toast({
           title: "Access Denied",
@@ -53,14 +55,22 @@ const Admin = () => {
     checkAdmin();
   }, [user, navigate, checkAdminStatus]);
 
+  // Memoize the refetch function to prevent unnecessary re-renders
+  const refetchApplications = useCallback(() => {
+    console.log('Manual refetch of host applications triggered');
+    hostApplicationsRefetch();
+  }, []);
+
   const { 
     data: hostApplications = [], 
     isLoading: isLoadingApplications,
-    refetch: refetchApplications
+    refetch: hostApplicationsRefetch
   } = useQuery({
     queryKey: ['hostApplications'],
     queryFn: getHostApplications,
     enabled: !!user && !!isAdmin,
+    refetchOnWindowFocus: true,
+    refetchInterval: 30000, // Refetch every 30 seconds
   });
 
   // Debug logging for host applications
@@ -70,29 +80,43 @@ const Admin = () => {
     console.log('Is admin:', isAdmin);
   }, [hostApplications, isLoadingApplications, isAdmin]);
 
+  // Memoize the refetch function to prevent unnecessary re-renders
+  const refetchUsers = useCallback(() => {
+    console.log('Manual refetch of users triggered');
+    usersRefetch();
+  }, []);
+
   const { 
     data: users = [], 
     isLoading: isLoadingUsers,
-    refetch: refetchUsers
+    refetch: usersRefetch
   } = useQuery({
     queryKey: ['allUsers'],
     queryFn: getAllUsers,
     enabled: !!user && !!isAdmin && activeTab === 'users',
+    refetchOnWindowFocus: true,
+    refetchInterval: 30000, // Refetch every 30 seconds
   });
 
   const wrappedUpdateApplicationStatus = async (applicationId: string, status: 'approved' | 'rejected', userId: string) => {
+    console.log(`Updating application status: ${applicationId} to ${status}`);
     setProcessingIds(prev => [...prev, applicationId]);
     try {
-      return await updateApplicationStatus(applicationId, status, userId);
+      const result = await updateApplicationStatus(applicationId, status, userId);
+      console.log('Update application status result:', result);
+      return result;
     } finally {
       setProcessingIds(prev => prev.filter(id => id !== applicationId));
     }
   };
 
   const wrappedUpdateUserRole = async (userId: string, role: 'user' | 'host' | 'admin') => {
+    console.log(`Updating user role: ${userId} to ${role}`);
     setProcessingIds(prev => [...prev, userId]);
     try {
-      return await updateUserRole(userId, role);
+      const result = await updateUserRole(userId, role);
+      console.log('Update user role result:', result);
+      return result;
     } finally {
       setProcessingIds(prev => prev.filter(id => id !== userId));
     }

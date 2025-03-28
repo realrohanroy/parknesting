@@ -17,8 +17,10 @@ export function useHostApplications(user: User | null) {
     setError(null);
     
     try {
-      // Fetch applications with profiles in a single query
-      const { data: applications, error: applicationsError } = await supabase
+      console.log('Fetching host applications for user:', user.id);
+      
+      // Use .from instead of destructuring to better handle errors
+      const response = await supabase
         .from('host_applications')
         .select(`
           *,
@@ -30,9 +32,12 @@ export function useHostApplications(user: User | null) {
         `)
         .order('created_at', { ascending: false });
       
-      if (applicationsError) throw applicationsError;
+      if (response.error) throw response.error;
+      
+      const applications = response.data || [];
       
       console.log('Raw host applications data:', applications);
+      console.log('Number of applications fetched:', applications.length);
       
       // Process the applications to match the expected format
       const processedApplications = applications.map(application => {
@@ -75,6 +80,8 @@ export function useHostApplications(user: User | null) {
       });
       
       console.log('Processed host applications:', processedApplications);
+      console.log('Number of processed applications:', processedApplications.length);
+      
       return processedApplications;
     } catch (err: any) {
       console.error('Error fetching host applications:', err);
@@ -101,29 +108,31 @@ export function useHostApplications(user: User | null) {
     setError(null);
     
     try {
+      console.log(`Updating application ${applicationId} to status ${status}`);
+      
       // Perform the updates in a transaction-like manner
       const updates = [];
       
       // 1. Update application status
-      updates.push(
-        supabase
-          .from('host_applications')
-          .update({
-            status,
-            processed_by: user.id,
-            processed_at: new Date().toISOString(),
-          })
-          .eq('id', applicationId)
-      );
+      const applicationUpdate = supabase
+        .from('host_applications')
+        .update({
+          status,
+          processed_by: user.id,
+          processed_at: new Date().toISOString(),
+        })
+        .eq('id', applicationId);
+      
+      updates.push(applicationUpdate);
       
       // 2. If approved, update user role
       if (status === 'approved') {
-        updates.push(
-          supabase
-            .from('profiles')
-            .update({ role: 'host' })
-            .eq('id', userId)
-        );
+        const userRoleUpdate = supabase
+          .from('profiles')
+          .update({ role: 'host' })
+          .eq('id', userId);
+        
+        updates.push(userRoleUpdate);
       }
       
       // Execute all updates
@@ -132,8 +141,11 @@ export function useHostApplications(user: User | null) {
       // Check for errors
       const errors = results.filter(result => result.error !== null);
       if (errors.length > 0) {
-        throw new Error(errors[0].error.message);
+        console.error('Update errors:', errors);
+        throw new Error(errors[0].error?.message || 'Unknown error');
       }
+      
+      console.log('Application updated successfully');
       
       toast({
         title: 'Success',

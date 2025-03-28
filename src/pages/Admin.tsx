@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { useAdmin } from '@/hooks/use-admin'; // Fixed missing import
 import {
   SidebarProvider,
   SidebarInset,
@@ -94,7 +95,7 @@ const Admin = () => {
 
   // Query for host applications
   const { 
-    data: hostApplications = [], 
+    data: hostApplications = [] as HostApplication[], // Fixed type assertion
     isLoading: isLoadingApplications,
     refetch: hostApplicationsRefetch,
     error: hostApplicationsError
@@ -148,7 +149,7 @@ const Admin = () => {
   }, []);
 
   const { 
-    data: users = [], 
+    data: users = [], // Type will be inferred from getAllUsers return type
     isLoading: isLoadingUsers,
     refetch: usersRefetch
   } = useQuery({
@@ -261,7 +262,7 @@ const Admin = () => {
                       </button>
                     </div>
                     <HostApplicationsManager
-                      hostApplications={hostApplications}
+                      hostApplications={hostApplications as HostApplication[]} // Ensure proper typing here
                       isLoadingApplications={isLoadingApplications}
                       processingIds={processingIds}
                       updateApplicationStatus={wrappedUpdateApplicationStatus}
@@ -274,7 +275,7 @@ const Admin = () => {
             
             {activeTab === 'users' && (
               <UserManager
-                users={users}
+                users={Array.isArray(users) ? users : []} // Ensure proper typing here
                 isLoadingUsers={isLoadingUsers}
                 processingIds={processingIds}
                 updateUserRole={wrappedUpdateUserRole}

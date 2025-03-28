@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, AlertCircle } from 'lucide-react';
 
 interface PendingApplicationsProps {
   applications: HostApplication[];
@@ -23,10 +23,26 @@ const PendingApplications = ({
   onApprove,
   onReject
 }: PendingApplicationsProps) => {
+  // Log when the component renders and what data it receives
+  React.useEffect(() => {
+    console.log('PendingApplications component rendered with data:', applications);
+  }, [applications]);
+
   if (isLoading) {
     return (
       <div className="text-center py-4 flex justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-parkongo-600" />
+      </div>
+    );
+  }
+
+  // Check for valid applications array
+  if (!Array.isArray(applications)) {
+    return (
+      <div className="text-center py-8 text-red-500">
+        <AlertCircle className="h-12 w-12 mx-auto mb-2" />
+        <h3 className="text-lg font-medium mb-1">Data Error</h3>
+        <p>Invalid application data received. Please refresh the page.</p>
       </div>
     );
   }

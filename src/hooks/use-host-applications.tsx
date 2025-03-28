@@ -39,6 +39,11 @@ export function useHostApplications(user: User | null) {
       console.log('Raw host applications data:', applications);
       console.log('Number of applications fetched:', applications.length);
       
+      // If no applications were found, log this clearly
+      if (applications.length === 0) {
+        console.log('WARNING: No host applications were found in the database');
+      }
+      
       // Process the applications to match the expected format
       const processedApplications = applications.map(application => {
         // Create default profile data

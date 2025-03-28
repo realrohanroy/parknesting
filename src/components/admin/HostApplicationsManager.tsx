@@ -26,7 +26,8 @@ const HostApplicationsManager = ({
   // Log the host applications data whenever it changes
   useEffect(() => {
     console.log('HostApplicationsManager received applications:', hostApplications);
-    console.log('Number of applications:', hostApplications.length);
+    console.log('Applications array is array?', Array.isArray(hostApplications));
+    console.log('Number of applications:', hostApplications?.length || 0);
     console.log('Pending applications:', getPendingApplications().length);
     console.log('Processed applications:', getProcessedApplications().length);
   }, [hostApplications]);
@@ -38,12 +39,22 @@ const HostApplicationsManager = ({
     },
     onSuccess: () => {
       console.log('Mutation succeeded, invalidating queries');
+      // Invalidate both queries to ensure fresh data
       queryClient.invalidateQueries({ queryKey: ['hostApplications'] });
       queryClient.invalidateQueries({ queryKey: ['allUsers'] });
       
       // Immediately refetch to update the UI
       console.log('Refetching applications after mutation');
-      refetchApplications();
+      setTimeout(() => {
+        refetchApplications();
+      }, 300);
+    },
+    onSettled: () => {
+      // Always refetch when mutation settles (success or error)
+      console.log('Mutation settled, ensuring data is refreshed');
+      setTimeout(() => {
+        refetchApplications();
+      }, 1000);
     },
   });
 
@@ -58,12 +69,23 @@ const HostApplicationsManager = ({
   };
 
   const getPendingApplications = () => {
+    if (!Array.isArray(hostApplications)) {
+      console.error('hostApplications is not an array:', hostApplications);
+      return [];
+    }
     return hostApplications.filter((app: HostApplication) => app.status === 'pending');
   };
 
   const getProcessedApplications = () => {
+    if (!Array.isArray(hostApplications)) {
+      console.error('hostApplications is not an array:', hostApplications);
+      return [];
+    }
     return hostApplications.filter((app: HostApplication) => app.status === 'approved' || app.status === 'rejected');
   };
+
+  const pendingApplications = getPendingApplications();
+  const processedApplications = getProcessedApplications();
 
   return (
     <div className="space-y-6">
@@ -76,7 +98,7 @@ const HostApplicationsManager = ({
         </CardHeader>
         <CardContent>
           <PendingApplications 
-            applications={getPendingApplications()}
+            applications={pendingApplications}
             isLoading={isLoadingApplications}
             processingIds={processingIds}
             onApprove={handleApprove}
@@ -94,7 +116,7 @@ const HostApplicationsManager = ({
         </CardHeader>
         <CardContent>
           <ProcessedApplications 
-            applications={getProcessedApplications()}
+            applications={processedApplications}
             isLoading={isLoadingApplications}
           />
         </CardContent>

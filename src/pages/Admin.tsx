@@ -64,21 +64,36 @@ const Admin = () => {
   const { 
     data: hostApplications = [], 
     isLoading: isLoadingApplications,
-    refetch: hostApplicationsRefetch
+    refetch: hostApplicationsRefetch,
+    error: hostApplicationsError
   } = useQuery({
     queryKey: ['hostApplications'],
     queryFn: getHostApplications,
     enabled: !!user && !!isAdmin,
     refetchOnWindowFocus: true,
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: 15000, // Refetch every 15 seconds (more aggressive)
+    staleTime: 10000, // Consider data stale after 10 seconds
+    retry: 3, // Retry failed requests up to 3 times
   });
 
   // Debug logging for host applications
   useEffect(() => {
     console.log('Host applications from query:', hostApplications);
     console.log('Is loading applications:', isLoadingApplications);
+    console.log('Applications error:', hostApplicationsError);
     console.log('Is admin:', isAdmin);
-  }, [hostApplications, isLoadingApplications, isAdmin]);
+  }, [hostApplications, isLoadingApplications, hostApplicationsError, isAdmin]);
+
+  // Force a refresh on mount and when tab changes
+  useEffect(() => {
+    if (activeTab === 'hostApplications') {
+      console.log('Active tab is hostApplications, triggering refresh');
+      const timer = setTimeout(() => {
+        refetchApplications();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, refetchApplications]);
 
   // Memoize the refetch function to prevent unnecessary re-renders
   const refetchUsers = useCallback(() => {
@@ -95,7 +110,7 @@ const Admin = () => {
     queryFn: getAllUsers,
     enabled: !!user && !!isAdmin && activeTab === 'users',
     refetchOnWindowFocus: true,
-    refetchInterval: 30000, // Refetch every 30 seconds
+    refetchInterval: 15000, // More frequent refresh
   });
 
   const wrappedUpdateApplicationStatus = async (applicationId: string, status: 'approved' | 'rejected', userId: string) => {
@@ -104,6 +119,12 @@ const Admin = () => {
     try {
       const result = await updateApplicationStatus(applicationId, status, userId);
       console.log('Update application status result:', result);
+      
+      // Force refresh after update
+      setTimeout(() => {
+        refetchApplications();
+      }, 300);
+      
       return result;
     } finally {
       setProcessingIds(prev => prev.filter(id => id !== applicationId));
@@ -116,6 +137,14 @@ const Admin = () => {
     try {
       const result = await updateUserRole(userId, role);
       console.log('Update user role result:', result);
+      
+      // Force refresh after update
+      setTimeout(() => {
+        refetchUsers();
+        // Also refresh applications in case there are relationship changes
+        refetchApplications();
+      }, 300);
+      
       return result;
     } finally {
       setProcessingIds(prev => prev.filter(id => id !== userId));
@@ -145,13 +174,35 @@ const Admin = () => {
               <>
                 {isLoadingApplications ? (
                   <p>Loading applications...</p>
+                ) : hostApplicationsError ? (
+                  <div className="p-4 border border-red-200 rounded-md bg-red-50 text-red-700">
+                    <p className="font-medium mb-2">Error loading applications</p>
+                    <p className="text-sm">{String(hostApplicationsError)}</p>
+                    <button 
+                      onClick={refetchApplications} 
+                      className="mt-3 px-3 py-1 bg-red-100 hover:bg-red-200 rounded-md text-sm"
+                    >
+                      Retry
+                    </button>
+                  </div>
                 ) : (
                   <>
-                    <p className="mb-4 text-sm text-gray-500">
-                      {hostApplications.length === 0 
-                        ? "No host applications found. Applications will appear here when users apply to become hosts." 
-                        : `Showing ${hostApplications.length} host application(s)`}
-                    </p>
+                    <div className="flex justify-between items-center mb-4">
+                      <p className="text-sm text-gray-500">
+                        {hostApplications.length === 0 
+                          ? "No host applications found. Applications will appear here when users apply to become hosts." 
+                          : `Showing ${hostApplications.length} host application(s)`}
+                      </p>
+                      <button 
+                        onClick={refetchApplications}
+                        className="text-sm px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-md flex items-center gap-1"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Refresh
+                      </button>
+                    </div>
                     <HostApplicationsManager
                       hostApplications={hostApplications}
                       isLoadingApplications={isLoadingApplications}

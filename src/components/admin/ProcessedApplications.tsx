@@ -4,7 +4,7 @@ import { HostApplication } from '@/types/admin';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Clock, Loader2 } from 'lucide-react';
+import { Clock, Loader2, AlertCircle } from 'lucide-react';
 
 interface ProcessedApplicationsProps {
   applications: HostApplication[];
@@ -28,7 +28,18 @@ const ProcessedApplications = ({
     );
   }
 
-  if (!applications || applications.length === 0) {
+  // Check for valid applications array
+  if (!Array.isArray(applications)) {
+    return (
+      <div className="text-center py-8 text-red-500">
+        <AlertCircle className="h-12 w-12 mx-auto mb-2" />
+        <h3 className="text-lg font-medium mb-1">Data Error</h3>
+        <p>Invalid processed applications data received. Please refresh the page.</p>
+      </div>
+    );
+  }
+
+  if (applications.length === 0) {
     return (
       <div className="text-center py-8">
         <Clock className="h-12 w-12 mx-auto text-gray-400 mb-2" />

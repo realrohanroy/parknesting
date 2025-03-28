@@ -1,12 +1,13 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAdmin, HostApplication, UserWithProfile } from '@/hooks/use-admin';
+import { HostApplication } from '@/types/admin';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/use-auth';
 import { toast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import {
   SidebarProvider,
   SidebarInset,
@@ -31,6 +32,27 @@ const Admin = () => {
   
   const [activeTab, setActiveTab] = useState('hostApplications');
   const [processingIds, setProcessingIds] = useState<string[]>([]);
+  const [lastRefreshTime, setLastRefreshTime] = useState<number>(Date.now());
+
+  // Add direct check for any host applications
+  const checkForApplications = async () => {
+    if (!user) return;
+    
+    try {
+      console.log('Direct check for any host applications');
+      const { data, error } = await supabase
+        .from('host_applications')
+        .select('id, status')
+        .limit(5);
+        
+      if (error) throw error;
+      
+      console.log('Direct check result:', data);
+      console.log('Number of applications found:', data?.length || 0);
+    } catch (err) {
+      console.error('Error in direct application check:', err);
+    }
+  };
 
   useEffect(() => {
     if (!user) {
@@ -49,36 +71,47 @@ const Admin = () => {
           variant: "destructive",
         });
         navigate('/');
+      } else {
+        // If user is admin, do a direct check for applications
+        checkForApplications();
       }
     };
 
     checkAdmin();
   }, [user, navigate, checkAdminStatus]);
 
-  // Memoize the refetch function to prevent unnecessary re-renders
+  // Force refresh function
+  const forceRefresh = useCallback(() => {
+    console.log('Force refresh triggered');
+    setLastRefreshTime(Date.now());
+  }, []);
+
+  // Manual refetch function
   const refetchApplications = useCallback(() => {
     console.log('Manual refetch of host applications triggered');
     hostApplicationsRefetch();
   }, []);
 
+  // Query for host applications
   const { 
     data: hostApplications = [], 
     isLoading: isLoadingApplications,
     refetch: hostApplicationsRefetch,
     error: hostApplicationsError
   } = useQuery({
-    queryKey: ['hostApplications'],
+    queryKey: ['hostApplications', lastRefreshTime],
     queryFn: getHostApplications,
     enabled: !!user && !!isAdmin,
     refetchOnWindowFocus: true,
-    refetchInterval: 15000, // Refetch every 15 seconds (more aggressive)
-    staleTime: 10000, // Consider data stale after 10 seconds
+    refetchInterval: 10000, // Refetch every 10 seconds
+    staleTime: 5000, // Consider data stale after 5 seconds
     retry: 3, // Retry failed requests up to 3 times
   });
 
   // Debug logging for host applications
   useEffect(() => {
     console.log('Host applications from query:', hostApplications);
+    console.log('Host applications length:', hostApplications?.length || 0);
     console.log('Is loading applications:', isLoadingApplications);
     console.log('Applications error:', hostApplicationsError);
     console.log('Is admin:', isAdmin);
@@ -89,13 +122,26 @@ const Admin = () => {
     if (activeTab === 'hostApplications') {
       console.log('Active tab is hostApplications, triggering refresh');
       const timer = setTimeout(() => {
+        forceRefresh();
         refetchApplications();
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [activeTab, refetchApplications]);
+  }, [activeTab, refetchApplications, forceRefresh]);
 
-  // Memoize the refetch function to prevent unnecessary re-renders
+  // Set up periodic refresh
+  useEffect(() => {
+    const refreshTimer = setInterval(() => {
+      if (activeTab === 'hostApplications') {
+        console.log('Periodic refresh triggered');
+        forceRefresh();
+        refetchApplications();
+      }
+    }, 30000); // Every 30 seconds
+    
+    return () => clearInterval(refreshTimer);
+  }, [activeTab, refetchApplications, forceRefresh]);
+
   const refetchUsers = useCallback(() => {
     console.log('Manual refetch of users triggered');
     usersRefetch();
@@ -106,11 +152,11 @@ const Admin = () => {
     isLoading: isLoadingUsers,
     refetch: usersRefetch
   } = useQuery({
-    queryKey: ['allUsers'],
+    queryKey: ['allUsers', lastRefreshTime],
     queryFn: getAllUsers,
     enabled: !!user && !!isAdmin && activeTab === 'users',
     refetchOnWindowFocus: true,
-    refetchInterval: 15000, // More frequent refresh
+    refetchInterval: 15000, // Refresh every 15 seconds
   });
 
   const wrappedUpdateApplicationStatus = async (applicationId: string, status: 'approved' | 'rejected', userId: string) => {
@@ -122,6 +168,7 @@ const Admin = () => {
       
       // Force refresh after update
       setTimeout(() => {
+        forceRefresh();
         refetchApplications();
       }, 300);
       
@@ -138,8 +185,8 @@ const Admin = () => {
       const result = await updateUserRole(userId, role);
       console.log('Update user role result:', result);
       
-      // Force refresh after update
       setTimeout(() => {
+        forceRefresh();
         refetchUsers();
         // Also refresh applications in case there are relationship changes
         refetchApplications();
@@ -151,7 +198,15 @@ const Admin = () => {
     }
   };
 
-  if (!user || !isAdmin) {
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p>Please sign in to access this page</p>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p>Checking permissions...</p>
@@ -172,9 +227,7 @@ const Admin = () => {
             
             {activeTab === 'hostApplications' && (
               <>
-                {isLoadingApplications ? (
-                  <p>Loading applications...</p>
-                ) : hostApplicationsError ? (
+                {hostApplicationsError ? (
                   <div className="p-4 border border-red-200 rounded-md bg-red-50 text-red-700">
                     <p className="font-medium mb-2">Error loading applications</p>
                     <p className="text-sm">{String(hostApplicationsError)}</p>
@@ -194,7 +247,11 @@ const Admin = () => {
                           : `Showing ${hostApplications.length} host application(s)`}
                       </p>
                       <button 
-                        onClick={refetchApplications}
+                        onClick={() => {
+                          forceRefresh();
+                          refetchApplications();
+                          checkForApplications();
+                        }}
                         className="text-sm px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-md flex items-center gap-1"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

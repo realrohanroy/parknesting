@@ -120,23 +120,54 @@ const ForHosts: React.FC = () => {
     mutationFn: async () => {
       if (!session?.user?.id) throw new Error('Not authenticated');
       
-      const { error } = await supabase
+      console.log('Submitting host application for user:', session.user.id);
+      
+      // Check if user already has a pending application
+      const { data: existingApplication, error: checkError } = await supabase
+        .from('host_applications')
+        .select('id, status')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+        
+      if (checkError) {
+        console.error('Error checking existing applications:', checkError);
+        throw checkError;
+      }
+      
+      if (existingApplication) {
+        console.log('User already has an application:', existingApplication);
+        setApplicationStatus(existingApplication.status);
+        return existingApplication;
+      }
+      
+      // Insert new application
+      const { data, error } = await supabase
         .from('host_applications')
         .insert({
           user_id: session.user.id,
-        });
+          status: 'pending'
+        })
+        .select()
+        .single();
       
-      if (error) throw error;
-      return true;
+      if (error) {
+        console.error('Error submitting host application:', error);
+        throw error;
+      }
+      
+      console.log('Host application submitted successfully:', data);
+      return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       setApplicationStatus('pending');
       toast({
         title: "Application Submitted",
         description: "Your host application has been submitted for review.",
       });
+      console.log('Host application mutation succeeded:', data);
     },
     onError: (error) => {
+      console.error('Host application mutation failed:', error);
       toast({
         title: "Error",
         description: `Failed to submit application: ${error.message}`,

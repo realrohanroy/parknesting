@@ -1,6 +1,5 @@
 
-import React from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useEffect } from 'react';
 import { HostApplication } from '@/types/admin';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
@@ -24,9 +23,11 @@ const PendingApplications = ({
   onReject
 }: PendingApplicationsProps) => {
   // Log when the component renders and what data it receives
-  React.useEffect(() => {
+  useEffect(() => {
     console.log('PendingApplications component rendered with data:', applications);
-  }, [applications]);
+    console.log('PendingApplications count:', applications?.length || 0);
+    console.log('Processing IDs:', processingIds);
+  }, [applications, processingIds]);
 
   if (isLoading) {
     return (
@@ -38,6 +39,7 @@ const PendingApplications = ({
 
   // Check for valid applications array
   if (!Array.isArray(applications)) {
+    console.error('PendingApplications received invalid data:', applications);
     return (
       <div className="text-center py-8 text-red-500">
         <AlertCircle className="h-12 w-12 mx-auto mb-2" />
@@ -68,68 +70,77 @@ const PendingApplications = ({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {applications.map((application: HostApplication) => (
-          <TableRow key={application.id}>
-            <TableCell>
-              <div className="flex items-center gap-3">
-                <Avatar>
-                  <AvatarImage src={application.profiles?.avatar_url || ''} />
-                  <AvatarFallback>
-                    {application.profiles?.first_name?.[0] || ''}{application.profiles?.last_name?.[0] || ''}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <div className="font-medium">
-                    {application.profiles?.first_name} {application.profiles?.last_name}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    {application.profiles?.email || 'Email not available'}
+        {applications.map((application: HostApplication) => {
+          if (!application || !application.id) {
+            console.warn('Invalid application object in pending applications', application);
+            return null;
+          }
+
+          console.log('Rendering pending application:', application.id, application);
+          
+          return (
+            <TableRow key={application.id}>
+              <TableCell>
+                <div className="flex items-center gap-3">
+                  <Avatar>
+                    <AvatarImage src={application.profiles?.avatar_url || ''} />
+                    <AvatarFallback>
+                      {application.profiles?.first_name?.[0] || ''}{application.profiles?.last_name?.[0] || ''}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="font-medium">
+                      {application.profiles?.first_name || 'Unknown'} {application.profiles?.last_name || 'User'}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {application.profiles?.email || 'Email not available'}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </TableCell>
-            <TableCell>
-              {new Date(application.created_at).toLocaleDateString()}
-            </TableCell>
-            <TableCell>
-              <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
-                {application.status}
-              </Badge>
-            </TableCell>
-            <TableCell className="text-right">
-              <div className="flex justify-end gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-green-500 text-green-600 hover:bg-green-50"
-                  onClick={() => onApprove(application.id, application.user_id)}
-                  disabled={processingIds.includes(application.id)}
-                >
-                  {processingIds.includes(application.id) ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                  ) : (
-                    <CheckCircle2 className="mr-1 h-4 w-4" />
-                  )}
-                  Approve
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-red-500 text-red-600 hover:bg-red-50"
-                  onClick={() => onReject(application.id, application.user_id)}
-                  disabled={processingIds.includes(application.id)}
-                >
-                  {processingIds.includes(application.id) ? (
-                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                  ) : (
-                    <XCircle className="mr-1 h-4 w-4" />
-                  )}
-                  Reject
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
+              </TableCell>
+              <TableCell>
+                {application.created_at ? new Date(application.created_at).toLocaleDateString() : 'Unknown date'}
+              </TableCell>
+              <TableCell>
+                <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
+                  {application.status || 'unknown'}
+                </Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-green-500 text-green-600 hover:bg-green-50"
+                    onClick={() => onApprove(application.id, application.user_id)}
+                    disabled={processingIds.includes(application.id)}
+                  >
+                    {processingIds.includes(application.id) ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <CheckCircle2 className="mr-1 h-4 w-4" />
+                    )}
+                    Approve
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-red-500 text-red-600 hover:bg-red-50"
+                    onClick={() => onReject(application.id, application.user_id)}
+                    disabled={processingIds.includes(application.id)}
+                  >
+                    {processingIds.includes(application.id) ? (
+                      <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    ) : (
+                      <XCircle className="mr-1 h-4 w-4" />
+                    )}
+                    Reject
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );

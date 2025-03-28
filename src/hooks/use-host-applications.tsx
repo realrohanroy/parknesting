@@ -11,7 +11,10 @@ export function useHostApplications(user: User | null) {
 
   // Fetch all host applications with optimized query
   const getHostApplications = useCallback(async () => {
-    if (!user) return [];
+    if (!user) {
+      console.log('No user provided to getHostApplications');
+      return [];
+    }
     
     setIsLoading(true);
     setError(null);
@@ -19,78 +22,88 @@ export function useHostApplications(user: User | null) {
     try {
       console.log('Fetching host applications for user:', user.id);
       
-      // Use .from instead of destructuring to better handle errors
+      // Use .from instead of destructuring for better error handling
       const response = await supabase
         .from('host_applications')
         .select(`
           *,
           profiles:user_id (
+            id,
             first_name, 
             last_name, 
-            avatar_url
+            avatar_url,
+            email
           )
         `)
         .order('created_at', { ascending: false });
       
-      if (response.error) throw response.error;
+      // Detailed error logging
+      if (response.error) {
+        console.error('Supabase error fetching applications:', response.error);
+        throw response.error;
+      }
       
       const applications = response.data || [];
       
       console.log('Raw host applications data:', applications);
       console.log('Number of applications fetched:', applications.length);
       
-      // If no applications were found, log this clearly
       if (applications.length === 0) {
-        console.log('WARNING: No host applications were found in the database');
+        console.log('No host applications were found in the database');
+      } else {
+        console.log('First application:', applications[0]);
       }
       
-      // Process the applications to match the expected format
+      // Map applications to ensure consistent format
       const processedApplications = applications.map(application => {
+        if (!application) {
+          console.warn('Found null/undefined application in response');
+          return null;
+        }
+        
         // Create default profile data
         const defaultProfile = { 
-          first_name: null, 
-          last_name: null, 
-          avatar_url: null 
+          id: application.user_id,
+          first_name: 'Unknown', 
+          last_name: 'User', 
+          avatar_url: null,
+          email: `user-${application.user_id.substring(0, 8)}@example.com`
         };
         
-        // Create a new profiles object with safe properties
+        // Create profiles object with safe properties
         let profileData = defaultProfile;
         
         // Check if profiles exists and is not null
         if (application.profiles && typeof application.profiles === 'object') {
-          // Type assertion to handle nullable properties safely
           const profiles = application.profiles as { 
-            first_name: string | null; 
-            last_name: string | null; 
-            avatar_url: string | null;
+            id?: string;
+            first_name?: string | null; 
+            last_name?: string | null; 
+            avatar_url?: string | null;
+            email?: string | null;
           };
           
           profileData = {
-            first_name: profiles.first_name,
-            last_name: profiles.last_name,
-            avatar_url: profiles.avatar_url
+            id: application.user_id,
+            first_name: profiles.first_name || defaultProfile.first_name,
+            last_name: profiles.last_name || defaultProfile.last_name,
+            avatar_url: profiles.avatar_url || defaultProfile.avatar_url,
+            email: profiles.email || defaultProfile.email
           };
         }
         
-        // Simulate email (in a real app, you'd use a secure method)
-        const email = `user-${application.user_id.substring(0, 8)}@example.com`;
-        
         return {
           ...application,
-          profiles: {
-            ...profileData,
-            email
-          }
+          profiles: profileData
         } as HostApplication;
-      });
+      }).filter(Boolean) as HostApplication[];
       
       console.log('Processed host applications:', processedApplications);
-      console.log('Number of processed applications:', processedApplications.length);
       
       return processedApplications;
     } catch (err: any) {
       console.error('Error fetching host applications:', err);
-      setError(err.message);
+      setError(err.message || 'Failed to fetch host applications');
       toast({
         title: 'Error',
         description: 'Failed to load host applications',
@@ -102,19 +115,21 @@ export function useHostApplications(user: User | null) {
     }
   }, [user]);
 
-  // Update host application status with optimistic updates
+  // Update host application status
   const updateApplicationStatus = useCallback(async (
     applicationId: string,
     status: 'approved' | 'rejected',
     userId: string
   ) => {
-    if (!user) return false;
+    if (!user) {
+      console.log('No user provided to updateApplicationStatus');
+      return false;
+    }
     
     setError(null);
+    console.log(`Updating application ${applicationId} to status ${status} for user ${userId}`);
     
     try {
-      console.log(`Updating application ${applicationId} to status ${status}`);
-      
       // Perform the updates in a transaction-like manner
       const updates = [];
       
@@ -160,7 +175,7 @@ export function useHostApplications(user: User | null) {
       return true;
     } catch (err: any) {
       console.error(`Error updating application:`, err);
-      setError(err.message);
+      setError(err.message || 'Failed to update application');
       toast({
         title: 'Error',
         description: `Failed to ${status} application`,

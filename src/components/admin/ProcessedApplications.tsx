@@ -18,6 +18,7 @@ const ProcessedApplications = ({
   // Add debug log to track when this component renders and what data it receives
   useEffect(() => {
     console.log('ProcessedApplications rendered with:', applications);
+    console.log('ProcessedApplications count:', applications?.length || 0);
   }, [applications]);
 
   if (isLoading) {
@@ -30,6 +31,7 @@ const ProcessedApplications = ({
 
   // Check for valid applications array
   if (!Array.isArray(applications)) {
+    console.error('ProcessedApplications received invalid data:', applications);
     return (
       <div className="text-center py-8 text-red-500">
         <AlertCircle className="h-12 w-12 mx-auto mb-2" />
@@ -59,38 +61,45 @@ const ProcessedApplications = ({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {applications.map((application: HostApplication) => (
-          <TableRow key={application.id}>
-            <TableCell>
-              <div className="flex items-center gap-3">
-                <Avatar>
-                  <AvatarImage src={application.profiles?.avatar_url || ''} />
-                  <AvatarFallback>
-                    {application.profiles?.first_name?.[0] || ''}{application.profiles?.last_name?.[0] || ''}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <div className="font-medium">
-                    {application.profiles?.first_name} {application.profiles?.last_name}
-                  </div>
-                  <div className="text-sm text-gray-500">
-                    {application.profiles?.email || 'Email not available'}
+        {applications.map((application: HostApplication) => {
+          if (!application || !application.id) {
+            console.warn('Invalid application object in processed applications', application);
+            return null;
+          }
+
+          return (
+            <TableRow key={application.id}>
+              <TableCell>
+                <div className="flex items-center gap-3">
+                  <Avatar>
+                    <AvatarImage src={application.profiles?.avatar_url || ''} />
+                    <AvatarFallback>
+                      {application.profiles?.first_name?.[0] || ''}{application.profiles?.last_name?.[0] || ''}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="font-medium">
+                      {application.profiles?.first_name || 'Unknown'} {application.profiles?.last_name || 'User'}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {application.profiles?.email || 'Email not available'}
+                    </div>
                   </div>
                 </div>
-              </div>
-            </TableCell>
-            <TableCell>
-              {new Date(application.created_at).toLocaleDateString()}
-            </TableCell>
-            <TableCell>
-              <Badge variant={
-                application.status === 'approved' ? 'default' : 'destructive'
-              }>
-                {application.status}
-              </Badge>
-            </TableCell>
-          </TableRow>
-        ))}
+              </TableCell>
+              <TableCell>
+                {application.created_at ? new Date(application.created_at).toLocaleDateString() : 'Unknown date'}
+              </TableCell>
+              <TableCell>
+                <Badge variant={
+                  application.status === 'approved' ? 'default' : 'destructive'
+                }>
+                  {application.status || 'unknown'}
+                </Badge>
+              </TableCell>
+            </TableRow>
+          );
+        })}
       </TableBody>
     </Table>
   );

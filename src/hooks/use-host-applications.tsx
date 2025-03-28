@@ -22,31 +22,33 @@ export function useHostApplications(user: User | null) {
     try {
       console.log('Fetching host applications for user:', user.id);
       
-      // Modified query to use join instead of the foreign key reference 
-      const response = await supabase
+      // Fixed query to use proper join syntax with profiles table
+      const { data: applications, error: fetchError } = await supabase
         .from('host_applications')
         .select(`
           *,
-          profiles:profiles(id, first_name, last_name, avatar_url, email)
+          profiles:profiles!host_applications_user_id_fkey(
+            id, 
+            first_name, 
+            last_name, 
+            avatar_url, 
+            email
+          )
         `)
-        .eq('profiles.id', 'user_id')
         .order('created_at', { ascending: false });
       
       // Detailed error logging
-      if (response.error) {
-        console.error('Supabase error fetching applications:', response.error);
-        throw response.error;
+      if (fetchError) {
+        console.error('Supabase error fetching applications:', fetchError);
+        throw fetchError;
       }
       
-      const applications = response.data || [];
-      
       console.log('Raw host applications data:', applications);
-      console.log('Number of applications fetched:', applications.length);
+      console.log('Number of applications fetched:', applications?.length || 0);
       
-      if (applications.length === 0) {
+      if (!applications || applications.length === 0) {
         console.log('No host applications were found in the database');
-      } else {
-        console.log('First application:', applications[0]);
+        return [];
       }
       
       // Map applications to ensure consistent format
@@ -62,7 +64,7 @@ export function useHostApplications(user: User | null) {
           first_name: 'Unknown', 
           last_name: 'User', 
           avatar_url: null,
-          email: `user-${application.user_id.substring(0, 8)}@example.com`
+          email: null
         };
         
         // Create profiles object with safe properties
@@ -79,7 +81,7 @@ export function useHostApplications(user: User | null) {
           };
           
           profileData = {
-            id: application.user_id,
+            id: profiles.id || application.user_id,
             first_name: profiles.first_name || defaultProfile.first_name,
             last_name: profiles.last_name || defaultProfile.last_name,
             avatar_url: profiles.avatar_url || defaultProfile.avatar_url,

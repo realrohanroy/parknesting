@@ -1,8 +1,7 @@
-
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import { ThemeProvider } from './components/ThemeProvider';
+import { ThemeProvider } from '@/components/ThemeProvider';
 import { Toaster } from './components/ui/toaster';
 
 // Pages

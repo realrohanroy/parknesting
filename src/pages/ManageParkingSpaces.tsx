@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
@@ -163,9 +164,20 @@ const ManageParkingSpaces = () => {
     mutationFn: async (values: ParkingSpaceFormValues) => {
       if (!user?.id) throw new Error("User not authenticated");
       
+      // Fix: Ensure all required fields are properly set with correct types
       const listingData = {
-        ...values,
         profile_id: user.id,
+        title: values.title,
+        description: values.description,
+        address: values.address,
+        city: values.city,
+        state: values.state,
+        zipcode: values.zipcode,
+        space_type: values.space_type,
+        hourly_rate: values.hourly_rate,
+        daily_rate: values.daily_rate,
+        monthly_rate: values.monthly_rate,
+        is_available: values.is_available,
       };
 
       const { data, error } = await supabase
@@ -196,9 +208,24 @@ const ManageParkingSpaces = () => {
 
   const updateListing = useMutation({
     mutationFn: async (values: ParkingSpaceFormValues) => {
+      // Fix: Similar to createListing, ensure all required fields are properly set
+      const updatedData = {
+        title: values.title,
+        description: values.description,
+        address: values.address,
+        city: values.city,
+        state: values.state,
+        zipcode: values.zipcode,
+        space_type: values.space_type,
+        hourly_rate: values.hourly_rate,
+        daily_rate: values.daily_rate,
+        monthly_rate: values.monthly_rate,
+        is_available: values.is_available,
+      };
+
       const { data, error } = await supabase
         .from('listings')
-        .update(values)
+        .update(updatedData)
         .eq('id', currentListing.id)
         .select()
         .single();

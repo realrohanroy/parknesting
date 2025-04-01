@@ -18,6 +18,7 @@ import Admin from './pages/Admin';
 import BecomeHost from './pages/BecomeHost';
 import HostProfileSetup from './pages/HostProfileSetup';
 import ManageParkingSpaces from './pages/ManageParkingSpaces';
+import Profile from './pages/Profile';
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -43,6 +44,10 @@ const router = createBrowserRouter([
   {
     path: '/dashboard',
     element: <Dashboard />,
+  },
+  {
+    path: '/profile',
+    element: <Profile />,
   },
   {
     path: '/search',

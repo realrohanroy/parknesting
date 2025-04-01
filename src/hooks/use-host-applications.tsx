@@ -52,48 +52,45 @@ export function useHostApplications(user: User | null) {
       }
       
       // Map applications to ensure consistent format
-      const processedApplications = applications.map(application => {
-        if (!application) {
-          console.warn('Found null/undefined application in response');
-          return null;
-        }
-        
-        // Create default profile data
-        const defaultProfile = { 
-          id: application.user_id,
-          first_name: 'Unknown', 
-          last_name: 'User', 
-          avatar_url: null,
-          email: null
-        };
-        
-        // Create profiles object with safe properties
-        let profileData = defaultProfile;
-        
-        // Check if profiles exists and is not null
-        if (application.profiles && typeof application.profiles === 'object') {
-          const profiles = application.profiles as { 
-            id?: string;
-            first_name?: string | null; 
-            last_name?: string | null; 
-            avatar_url?: string | null;
-            email?: string | null;
+      const processedApplications = applications
+        .filter(application => application !== null)
+        .map(application => {
+          // Create default profile data
+          const defaultProfile = { 
+            id: application.user_id,
+            first_name: 'Unknown', 
+            last_name: 'User', 
+            avatar_url: null,
+            email: null
           };
           
-          profileData = {
-            id: profiles.id || application.user_id,
-            first_name: profiles.first_name || defaultProfile.first_name,
-            last_name: profiles.last_name || defaultProfile.last_name,
-            avatar_url: profiles.avatar_url || defaultProfile.avatar_url,
-            email: profiles.email || defaultProfile.email
-          };
-        }
-        
-        return {
-          ...application,
-          profiles: profileData
-        } as HostApplication;
-      }).filter(Boolean) as HostApplication[];
+          // Create profiles object with safe properties
+          let profileData = defaultProfile;
+          
+          // Check if profiles exists and is not null
+          if (application.profiles && typeof application.profiles === 'object') {
+            const profiles = application.profiles as { 
+              id?: string;
+              first_name?: string | null; 
+              last_name?: string | null; 
+              avatar_url?: string | null;
+              email?: string | null;
+            };
+            
+            profileData = {
+              id: profiles.id || application.user_id,
+              first_name: profiles.first_name || defaultProfile.first_name,
+              last_name: profiles.last_name || defaultProfile.last_name,
+              avatar_url: profiles.avatar_url || defaultProfile.avatar_url,
+              email: profiles.email || defaultProfile.email
+            };
+          }
+          
+          return {
+            ...application,
+            profiles: profileData
+          } as HostApplication;
+        });
       
       console.log('Processed host applications:', processedApplications);
       
@@ -127,11 +124,11 @@ export function useHostApplications(user: User | null) {
     console.log(`Updating application ${applicationId} to status ${status} for user ${userId}`);
     
     try {
-      // Perform the updates in a transaction-like manner
-      const updates = [];
+      // Begin transaction-like sequence
+      let transactionSuccess = true;
       
       // 1. Update application status
-      const applicationUpdate = supabase
+      const { error: applicationError } = await supabase
         .from('host_applications')
         .update({
           status,
@@ -140,36 +137,39 @@ export function useHostApplications(user: User | null) {
         })
         .eq('id', applicationId);
       
-      updates.push(applicationUpdate);
+      if (applicationError) {
+        console.error('Error updating application status:', applicationError);
+        transactionSuccess = false;
+        throw applicationError;
+      }
       
       // 2. If approved, update user role
       if (status === 'approved') {
-        const userRoleUpdate = supabase
+        const { error: userRoleError } = await supabase
           .from('profiles')
           .update({ role: 'host' })
           .eq('id', userId);
         
-        updates.push(userRoleUpdate);
+        if (userRoleError) {
+          console.error('Error updating user role:', userRoleError);
+          transactionSuccess = false;
+          throw userRoleError;
+        }
       }
       
-      // Execute all updates
-      const results = await Promise.all(updates);
-      
-      // Check for errors
-      const errors = results.filter(result => result.error !== null);
-      if (errors.length > 0) {
-        console.error('Update errors:', errors);
-        throw new Error(errors[0].error?.message || 'Unknown error');
+      // Check overall transaction success
+      if (transactionSuccess) {
+        console.log('Application updated successfully');
+        
+        toast({
+          title: 'Success',
+          description: `Application ${status === 'approved' ? 'approved' : 'rejected'} successfully`,
+        });
+        
+        return true;
+      } else {
+        throw new Error('Transaction failed');
       }
-      
-      console.log('Application updated successfully');
-      
-      toast({
-        title: 'Success',
-        description: `Application ${status === 'approved' ? 'approved' : 'rejected'} successfully`,
-      });
-      
-      return true;
     } catch (err: any) {
       console.error(`Error updating application:`, err);
       setError(err.message || 'Failed to update application');

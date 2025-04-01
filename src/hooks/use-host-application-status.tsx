@@ -11,6 +11,7 @@ interface HostApplicationStatusHook {
   isLoading: boolean;
   error: string | null;
   checkStatus: () => Promise<ApplicationStatus>;
+  refreshStatus: () => Promise<void>;
 }
 
 export function useHostApplicationStatus(): HostApplicationStatusHook {
@@ -29,6 +30,8 @@ export function useHostApplicationStatus(): HostApplicationStatusHook {
     setError(null);
 
     try {
+      console.log("Checking host application status for user:", user.id);
+      
       // First check if user is already a host in their profile
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
@@ -36,14 +39,20 @@ export function useHostApplicationStatus(): HostApplicationStatusHook {
         .eq('id', user.id)
         .single();
       
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error("Error checking profile:", profileError);
+        throw profileError;
+      }
       
       if (profile && profile.role === 'host') {
+        console.log("User is already a host");
         setApplicationStatus('approved');
+        setIsLoading(false);
         return 'approved';
       }
       
       // Check for application status
+      console.log("Checking for host applications");
       const { data: application, error: appError } = await supabase
         .from('host_applications')
         .select('status')
@@ -51,23 +60,35 @@ export function useHostApplicationStatus(): HostApplicationStatusHook {
         .order('created_at', { ascending: false })
         .maybeSingle();
       
-      if (appError) throw appError;
+      if (appError) {
+        console.error("Error checking application:", appError);
+        throw appError;
+      }
       
       if (!application) {
+        console.log("No application found");
         setApplicationStatus('none');
+        setIsLoading(false);
         return 'none';
       }
       
-      setApplicationStatus(application.status as ApplicationStatus);
-      return application.status as ApplicationStatus;
+      console.log("Application status:", application.status);
+      const status = application.status as ApplicationStatus;
+      setApplicationStatus(status);
+      setIsLoading(false);
+      return status;
     } catch (err: any) {
       console.error("Error checking application status:", err);
       setError(err.message);
-      return 'none';
-    } finally {
       setIsLoading(false);
+      return 'none';
     }
   }, [user]);
+
+  // Function to manually refresh the status
+  const refreshStatus = useCallback(async () => {
+    await checkStatus();
+  }, [checkStatus]);
 
   // Check status when component mounts
   useEffect(() => {
@@ -78,6 +99,7 @@ export function useHostApplicationStatus(): HostApplicationStatusHook {
   useEffect(() => {
     if (!user) return;
 
+    console.log("Setting up real-time subscription for host application changes");
     const subscription = supabase
       .channel('host-application-changes')
       .on('postgres_changes', {
@@ -86,6 +108,7 @@ export function useHostApplicationStatus(): HostApplicationStatusHook {
         table: 'host_applications',
         filter: `user_id=eq.${user.id}`
       }, (payload) => {
+        console.log("Received update for host application:", payload);
         const newStatus = payload.new.status as ApplicationStatus;
         setApplicationStatus(newStatus);
         
@@ -105,10 +128,28 @@ export function useHostApplicationStatus(): HostApplicationStatusHook {
       })
       .subscribe();
 
+    // Also subscribe to profile changes (for role updates)
+    const profileSubscription = supabase
+      .channel('profile-role-changes')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'profiles',
+        filter: `id=eq.${user.id}`
+      }, (payload) => {
+        console.log("Received update for profile:", payload);
+        if (payload.new.role === 'host') {
+          setApplicationStatus('approved');
+        }
+      })
+      .subscribe();
+
     return () => {
+      console.log("Cleaning up subscriptions");
       supabase.removeChannel(subscription);
+      supabase.removeChannel(profileSubscription);
     };
   }, [user]);
 
-  return { applicationStatus, isLoading, error, checkStatus };
+  return { applicationStatus, isLoading, error, checkStatus, refreshStatus };
 }

@@ -32,7 +32,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Plus, MapPin, DollarSign, Calendar, Pencil, Trash2 } from 'lucide-react';
+import { Plus, MapPin, IndianRupee, Calendar, Pencil, Trash2 } from 'lucide-react';
 
 const parkingSpaceSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters"),
@@ -457,7 +457,7 @@ const ManageParkingSpaces = () => {
                           name="hourly_rate"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Hourly Rate ($)</FormLabel>
+                              <FormLabel>Hourly Rate (₹)</FormLabel>
                               <FormControl>
                                 <Input type="number" step="0.01" min="0" {...field} />
                               </FormControl>
@@ -471,7 +471,7 @@ const ManageParkingSpaces = () => {
                           name="daily_rate"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Daily Rate ($)</FormLabel>
+                              <FormLabel>Daily Rate (₹)</FormLabel>
                               <FormControl>
                                 <Input type="number" step="0.01" min="0" 
                                   value={field.value || ''}
@@ -488,7 +488,7 @@ const ManageParkingSpaces = () => {
                           name="monthly_rate"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel>Monthly Rate ($)</FormLabel>
+                              <FormLabel>Monthly Rate (₹)</FormLabel>
                               <FormControl>
                                 <Input type="number" step="0.01" min="0" 
                                   value={field.value || ''}
@@ -547,11 +547,11 @@ const ManageParkingSpaces = () => {
                         <span className="text-sm">{space.address}, {space.city}</span>
                       </div>
                       <div className="flex items-center">
-                        <DollarSign className="h-4 w-4 mr-2 text-gray-500" />
+                        <IndianRupee className="h-4 w-4 mr-2 text-gray-500" />
                         <span className="text-sm">
-                          ${space.hourly_rate}/hr
-                          {space.daily_rate && ` · $${space.daily_rate}/day`}
-                          {space.monthly_rate && ` · $${space.monthly_rate}/mo`}
+                          ₹{space.hourly_rate}/hr
+                          {space.daily_rate && ` · ₹${space.daily_rate}/day`}
+                          {space.monthly_rate && ` · ₹${space.monthly_rate}/mo`}
                         </span>
                       </div>
                       <p className="text-sm text-gray-500 line-clamp-2">

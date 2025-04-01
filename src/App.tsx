@@ -16,7 +16,8 @@ import ParkingSpotDetails from './pages/ParkingSpotDetails';
 import ForHosts from './pages/ForHosts';
 import Admin from './pages/Admin';
 import BecomeHost from './pages/BecomeHost';
-import HostProfileSetup from './pages/HostProfileSetup'; // Import new page
+import HostProfileSetup from './pages/HostProfileSetup';
+import ManageParkingSpaces from './pages/ManageParkingSpaces';
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -61,7 +62,11 @@ const router = createBrowserRouter([
   },
   {
     path: '/host-profile-setup',
-    element: <HostProfileSetup />, // Add the new route
+    element: <HostProfileSetup />,
+  },
+  {
+    path: '/manage-parking-spaces',
+    element: <ManageParkingSpaces />,
   },
   {
     path: '/admin',

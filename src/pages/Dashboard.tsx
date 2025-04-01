@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
@@ -7,7 +8,7 @@ import Footer from '@/components/Footer';
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { User, Home, Car, ShieldCheck } from 'lucide-react';
+import { User, Home, Car, ShieldCheck, ParkingSquare } from 'lucide-react';
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -78,14 +79,25 @@ const Dashboard = () => {
                     </Button>
                     
                     {userProfile?.role === "host" && (
-                      <Button 
-                        variant="outline" 
-                        className="w-full justify-start"
-                        onClick={() => navigate('/host-profile-setup')}
-                      >
-                        <Home className="mr-2 h-4 w-4" />
-                        Host Settings
-                      </Button>
+                      <>
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start"
+                          onClick={() => navigate('/host-profile-setup')}
+                        >
+                          <Home className="mr-2 h-4 w-4" />
+                          Host Settings
+                        </Button>
+                        
+                        <Button 
+                          variant="outline" 
+                          className="w-full justify-start"
+                          onClick={() => navigate('/manage-parking-spaces')}
+                        >
+                          <ParkingSquare className="mr-2 h-4 w-4" />
+                          Manage Spaces
+                        </Button>
+                      </>
                     )}
                     
                     <Button 

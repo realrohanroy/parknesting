@@ -138,10 +138,10 @@ const HostProfileSetup = () => {
         if (hostData) {
           setHostProfile(hostData);
           
-          // Set form values
+          // Set form values - Fixed the type issue here
           Object.entries(hostData).forEach(([key, value]) => {
-            if (value !== null && Object.keys(hostProfile).includes(key)) {
-              setValue(key as keyof HostProfile, value);
+            if (value !== null && key in hostData) {
+              setValue(key as keyof HostProfile, value as any);
             }
           });
         }

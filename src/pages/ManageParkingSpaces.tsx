@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/use-auth';
@@ -33,9 +32,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Plus, MapPin, Dollar, Calendar, Pencil, Trash2 } from 'lucide-react';
+import { Plus, MapPin, DollarSign, Calendar, Pencil, Trash2 } from 'lucide-react';
 
-// Define form schema for parking space listings
 const parkingSpaceSchema = z.object({
   title: z.string().min(5, "Title must be at least 5 characters"),
   description: z.string().min(20, "Description must be at least 20 characters"),
@@ -52,7 +50,6 @@ const parkingSpaceSchema = z.object({
 
 type ParkingSpaceFormValues = z.infer<typeof parkingSpaceSchema>;
 
-// Space type options
 const spaceTypes = [
   { value: 'driveway', label: 'Driveway' },
   { value: 'garage', label: 'Garage' },
@@ -96,7 +93,6 @@ const ManageParkingSpaces = () => {
     }
   }, [user, navigate]);
 
-  // Reset form when dialog is closed
   useEffect(() => {
     if (!isDialogOpen) {
       form.reset();
@@ -104,7 +100,6 @@ const ManageParkingSpaces = () => {
     }
   }, [isDialogOpen, form]);
 
-  // Set form values when editing a listing
   useEffect(() => {
     if (currentListing) {
       form.reset({
@@ -123,11 +118,9 @@ const ManageParkingSpaces = () => {
     }
   }, [currentListing, form]);
 
-  // Fetch host profile to check if user is approved as a host
   const { data: hostProfile, isLoading: loadingHostProfile } = useQuery({
     queryKey: ['hostProfile', user?.id],
     queryFn: async () => {
-      // First check if user has host role
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
@@ -139,7 +132,6 @@ const ManageParkingSpaces = () => {
         throw new Error('You must be an approved host to manage parking spaces');
       }
       
-      // Then fetch host data
       const { data: host, error: hostError } = await supabase
         .from('hosts')
         .select('*')
@@ -152,7 +144,6 @@ const ManageParkingSpaces = () => {
     enabled: !!user?.id,
   });
 
-  // Fetch parking space listings for this host
   const { data: parkingSpaces, isLoading } = useQuery({
     queryKey: ['parkingSpaces', user?.id],
     queryFn: async () => {
@@ -168,17 +159,18 @@ const ManageParkingSpaces = () => {
     enabled: !!user?.id,
   });
 
-  // Create new parking space listing
   const createListing = useMutation({
     mutationFn: async (values: ParkingSpaceFormValues) => {
+      if (!user?.id) throw new Error("User not authenticated");
+      
+      const listingData = {
+        ...values,
+        profile_id: user.id,
+      };
+
       const { data, error } = await supabase
         .from('listings')
-        .insert([
-          {
-            ...values,
-            profile_id: user?.id,
-          }
-        ])
+        .insert([listingData])
         .select()
         .single();
       
@@ -202,7 +194,6 @@ const ManageParkingSpaces = () => {
     },
   });
 
-  // Update parking space listing
   const updateListing = useMutation({
     mutationFn: async (values: ParkingSpaceFormValues) => {
       const { data, error } = await supabase
@@ -232,7 +223,6 @@ const ManageParkingSpaces = () => {
     },
   });
 
-  // Delete parking space listing
   const deleteListing = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -557,7 +547,7 @@ const ManageParkingSpaces = () => {
                         <span className="text-sm">{space.address}, {space.city}</span>
                       </div>
                       <div className="flex items-center">
-                        <Dollar className="h-4 w-4 mr-2 text-gray-500" />
+                        <DollarSign className="h-4 w-4 mr-2 text-gray-500" />
                         <span className="text-sm">
                           ${space.hourly_rate}/hr
                           {space.daily_rate && ` · $${space.daily_rate}/day`}
